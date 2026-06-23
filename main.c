@@ -51,6 +51,7 @@ Ball ball_r = {
 
 typedef struct Rect {
   Pos pos;
+  float angle;
   int dx;
   int dy;
 } Rect;
@@ -61,7 +62,7 @@ Rect screen_border = {
   .dy = (HEIGHT-1)/2,
 };
 
-Rect rect_l, rect_r;
+Rect rect_l, rect_r, rect_c;
 
 bool keymap[256] = {0};
 
@@ -78,8 +79,29 @@ typedef struct Color {
 #define CToUi32(color) (uint32_t) color.a<<24 | color.r << 16 | color.g << 8 | color.b 
 
 
+int draw_ball(uint32_t *pixels, Ball ball, float bt, Color color) {
+  int lx = ball.pos.x - ball.mag;
+  int rx = ball.pos.x + ball.mag;
+  int ly = ball.pos.y - ball.mag;
+  int ry = ball.pos.y + ball.mag;
 
-int draw_ball(uint32_t *pixels, Ball ball, Color color) {
+  lx = lx < 0 ? 0 : lx;
+  rx = rx >= WIDTH ? WIDTH - 1 : rx;
+  ly = ly < 0 ? 0 : ly;
+  ry = ry >= HEIGHT ? HEIGHT - 1 : ry;
+  
+  for (int i =lx; i<=rx; i++) {
+	for (int j=ly; j<=ry; j++) {
+	  float dist = sqrt(pow((float)i-ball.pos.x,2) + pow((float)j-ball.pos.y,2));
+
+	  if (ball.mag-bt < dist && dist <= ball.mag) pixels[j*WIDTH + i] = CToUi32(color);
+	}
+  }
+
+  return 0;
+}
+
+int draw_ball_filled(uint32_t *pixels, Ball ball, Color color) {
   int lx = ball.pos.x - ball.mag;
   int rx = ball.pos.x + ball.mag;
   int ly = ball.pos.y - ball.mag;
@@ -101,27 +123,40 @@ int draw_ball(uint32_t *pixels, Ball ball, Color color) {
   return 0;
 }
 
+// NOTE: b would be more accurate by using a norm. Maybe later
 int draw_rect_filled(uint32_t *pixels, Rect rect, Color color) {
-  int lx = rect.pos.x - rect.dx;
-  int rx = rect.pos.x + rect.dx;
-  int ly = rect.pos.y - rect.dy;
-  int ry = rect.pos.y + rect.dy;
+  float rx = (cos(-rect.angle) - sin(-rect.angle)) * .5;
+  float ry = (sin(-rect.angle) + cos(-rect.angle)) * .5;
 
-  lx = lx < 0 ? 0 : lx;
-  rx = rx >= WIDTH ? WIDTH - 1 : rx;
-  ly = ly < 0 ? 0 : ly;
-  ry = ry >= HEIGHT ? HEIGHT - 1 : ry;
+  float c = cos(-rect.angle);
+  float s = sin(-rect.angle);
 
-  for (int i = lx; i<=rx; i++) {
-	for (int j = ly; j<=ry; j++) {
-	  pixels[j*WIDTH + i] = CToUi32(color);
+  int b = (int) (rect.dx <= rect.dy ? rect.dy * 1.5 : rect.dx * 1.5); 
+  
+  for (int i = -b; i<b; i++) {
+	float _t_i = c * i;
+	float _t_j = s * i;
+	
+	for (int j = -b; j<b; j++) {
+	  int t_i = (int) floor(_t_i - s * j + rx);
+	  int t_j = (int) floor(_t_j + c * j + ry);
+
+	  if (-rect.dx <= t_i && t_i < rect.dx &&
+		  -rect.dy <= t_j && t_j < rect.dy) {
+		int di = i + rect.pos.x;
+		int dj = j + rect.pos.y;
+	  
+		if (0<=di && di<WIDTH && 0<=dj && dj<HEIGHT) {
+		  pixels[dj*WIDTH + di] = CToUi32(color);
+		}
+	  }
 	}
   }
 
   return 0;
 }
 
-int draw_rect_border(uint32_t *pixels, Rect rect, int border_t, Color color) {
+int draw_rect(uint32_t *pixels, Rect rect, float bt, Color color) {
   int lx = rect.pos.x - rect.dx;
   int rx = rect.pos.x + rect.dx;
   int ly = rect.pos.y - rect.dy;
@@ -162,7 +197,6 @@ typedef enum BLOCKED_DIR {
 } BLOCKED_DIR;
 
 // Collision at the border
-// TODO: Why does it matter if I do logical or instead of bitwise?
 BLOCKED_DIR rect_collision(Rect rect, Ball ball, bool outer) {
   BLOCKED_DIR mask = NONE;
   
@@ -220,7 +254,7 @@ Ball update_position(Ball ball, Pos move) {
 
 
 int init_scene(uint32_t *pixels) {
-  draw_ball(pixels, ball, RED);
+  draw_ball_filled(pixels, ball, RED);
 
   rect_l = (Rect) {
 	.pos = {.x=0, .y=HEIGHT-1},
@@ -228,6 +262,12 @@ int init_scene(uint32_t *pixels) {
 	.dy = 100};
   rect_r = (Rect) {
 	.pos = {.x=WIDTH-1, .y=HEIGHT-1},
+	.dx = 100,
+	.dy = 100};
+
+  rect_c = (Rect) { 
+	.pos = {.x=WIDTH/2, .y=HEIGHT/2},
+	.angle = 0.125*M_PI,
 	.dx = 100,
 	.dy = 100};
   
@@ -248,9 +288,9 @@ int update_scene(uint32_t *pixels) {
   update_move();
   ball = update_position(ball, move);
   
-  draw_ball(pixels, ball, RED);
-  draw_ball(pixels, ball_l, BLUE);
-  draw_ball(pixels, ball_r, GREEN);
+  draw_ball(pixels, ball, 1.,  RED);
+  draw_ball_filled(pixels, ball_l, BLUE);
+  draw_ball_filled(pixels, ball_r, GREEN);
 
   if (rect_collision(rect_l, ball, true)) {
 	draw_rect_filled(pixels, rect_l, RED);
@@ -262,6 +302,11 @@ int update_scene(uint32_t *pixels) {
   
   move.x = 0;
   move.y = 0;
+
+  
+  draw_rect_filled(pixels, rect_c, RED);
+  rect_c.angle += .01;
+
   
   return 0;
 }
