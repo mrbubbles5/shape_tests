@@ -64,6 +64,13 @@ Rect screen_border = {
 
 Rect rect_l, rect_r, rect_c;
 
+typedef struct Triangle {
+  Pos pos, p1, p2, p3;
+} Triangle;
+
+Triangle tri_a;
+
+
 bool keymap[256] = {0};
 
 typedef struct Color {
@@ -131,7 +138,9 @@ int draw_rect_filled(uint32_t *pixels, Rect rect, Color color) {
   float c = cos(-rect.angle);
   float s = sin(-rect.angle);
 
-  int b = (int) (rect.dx <= rect.dy ? rect.dy * 1.5 : rect.dx * 1.5); 
+  int b = (int) (rect.dx <= rect.dy ? rect.dy * 1.5 : rect.dx * 1.5);
+
+  // TODO: Optimize like the triangle
   
   for (int i = -b; i<b; i++) {
 	float _t_i = c * i;
@@ -155,6 +164,70 @@ int draw_rect_filled(uint32_t *pixels, Rect rect, Color color) {
 
   return 0;
 }
+
+// NOTE: Order of points is assumed to be clockwise.
+int draw_tria(uint32_t *pixels, Triangle t, Color color) {
+  int tp1x = t.pos.x + t.p1.x;
+  int tp1y = t.pos.y + t.p1.y;
+  int tp2x = t.pos.x + t.p2.x;
+  int tp2y = t.pos.y + t.p2.y;
+  int tp3x = t.pos.x + t.p3.x;
+  int tp3y = t.pos.y + t.p3.y;
+  
+  int xl =tp1x <= tp2x && tp1x <= tp3x ? tp1x : ( tp2x <= tp3x ? tp2x : tp3x);
+  int xr =tp1x >= tp2x && tp1x >= tp3x ? tp1x : ( tp2x >= tp3x ? tp2x : tp3x);
+  int yl =tp1y <= tp2y && tp1y <= tp3y ? tp1y : ( tp2y <= tp3y ? tp2y : tp3y);
+  int yr =tp1y >= tp2y && tp1y >= tp3y ? tp1y : ( tp2y >= tp3y ? tp2y : tp3y);
+
+  xl = 0<=xl ? xl : 0;
+  xr = xr < WIDTH ? xr : WIDTH;
+  yl = 0<=yl ? yl : 0;
+  yr = yr < HEIGHT ? yr : HEIGHT;
+
+  int dp1p2x = tp2x - tp1x;
+  int dp1p2y = tp2y - tp1y;
+  int dp2p3x = tp3x - tp2x;
+  int dp2p3y = tp3y - tp2y;
+  int dp3p1x = tp1x - tp3x;
+  int dp3p1y = tp1y - tp3y;
+
+  int stp1x = dp1p2y * tp1x;
+  int stp1y = dp1p2x * tp1y;
+  int stp2x = dp2p3y * tp2x;
+  int stp2y = dp2p3x * tp2y;
+  int stp3x = dp3p1y * tp3x;
+  int stp3y = dp3p1x * tp3y;
+
+  int C1 = stp1x - stp1y;
+  int C2 = stp2x - stp2y;
+  int C3 = stp3x - stp3y;
+
+  int sstp1 = yl * dp1p2x - xl * dp1p2y + C1;
+  int sstp2 = yl * dp2p3x - xl * dp2p3y + C2;
+  int sstp3 = yl * dp3p1x - xl * dp3p1y + C3;
+
+  for (int j = yl; j<yr; j++) {
+  	int i_sstp1 = sstp1;
+	int i_sstp2 = sstp2;
+	int i_sstp3 = sstp3;
+	for (int i = xl; i<xr; i++) {
+	  if (i_sstp1 > 0 &&
+		  i_sstp2 > 0 &&
+		  i_sstp3 > 0) {
+		  pixels[j*WIDTH + i] = CToUi32(color);
+	  }
+	  i_sstp1 -= dp1p2y;
+	  i_sstp2 -= dp2p3y;
+	  i_sstp3 -= dp3p1y;
+	}
+	sstp1 += dp1p2x;
+	sstp2 += dp2p3x;
+	sstp3 += dp3p1x;
+  }
+
+  return 0;
+}
+
 
 int draw_rect(uint32_t *pixels, Rect rect, float bt, Color color) {
   int lx = rect.pos.x - rect.dx;
@@ -270,6 +343,13 @@ int init_scene(uint32_t *pixels) {
 	.angle = 0.125*M_PI,
 	.dx = 100,
 	.dy = 100};
+
+  tri_a = (Triangle) {
+	.pos = {.x=WIDTH/2, .y=HEIGHT/2},
+	.p1 = {.x = -100, .y = 0},
+	.p2 = {.x = 100, .y = 0},
+	.p3 = {.x = 0, .y = 100},
+  };
   
   return 0;
 }
@@ -304,8 +384,17 @@ int update_scene(uint32_t *pixels) {
   move.y = 0;
 
   
-  draw_rect_filled(pixels, rect_c, RED);
+  //draw_rect_filled(pixels, rect_c, RED);
   rect_c.angle += .01;
+
+  draw_tria(pixels, tri_a, RED);
+  tri_a.p1.x = (int) ((tri_a.p1.x+0.5) * cos(.001) - (tri_a.p1.x+ 0.5) * sin(.001));
+  tri_a.p1.y = (int) ((tri_a.p1.x+0.5) * sin(.001) + (tri_a.p1.y+ 0.5) * cos(.001));
+  tri_a.p2.x = (int) ((tri_a.p2.x+0.5) * cos(.001) - (tri_a.p2.x+ 0.5) * sin(.001));
+  tri_a.p2.y = (int) ((tri_a.p2.x+0.5) * sin(.001) + (tri_a.p2.y+ 0.5) * cos(.001));
+  tri_a.p3.x = (int) ((tri_a.p3.x+0.5) * cos(.001) - (tri_a.p3.x+ 0.5) * sin(.001));
+  tri_a.p3.y = (int) ((tri_a.p3.x+0.5) * sin(.001) + (tri_a.p3.y+ 0.5) * cos(.001));
+	
 
   
   return 0;
