@@ -16,7 +16,9 @@
 typedef struct Pos {
   int x,y;
 } Pos;
-
+typedef struct Posf {
+  float x,y;
+} Posf;
 Pos move = {
   .x=0,
   .y=0,
@@ -65,7 +67,7 @@ Rect screen_border = {
 Rect rect_l, rect_r, rect_c;
 
 typedef struct Triangle {
-  Pos pos, p1, p2, p3;
+  Posf pos, p1, p2, p3;
 } Triangle;
 
 Triangle tri_a;
@@ -167,40 +169,40 @@ int draw_rect_filled(uint32_t *pixels, Rect rect, Color color) {
 
 // NOTE: Order of points is assumed to be clockwise.
 int draw_tria(uint32_t *pixels, Triangle t, Color color) {
-  int tp1x = t.pos.x + t.p1.x;
-  int tp1y = t.pos.y + t.p1.y;
-  int tp2x = t.pos.x + t.p2.x;
-  int tp2y = t.pos.y + t.p2.y;
-  int tp3x = t.pos.x + t.p3.x;
-  int tp3y = t.pos.y + t.p3.y;
+  float tp1x = t.pos.x + t.p1.x;
+  float tp1y = t.pos.y + t.p1.y;
+  float tp2x = t.pos.x + t.p2.x;
+  float tp2y = t.pos.y + t.p2.y;
+  float tp3x = t.pos.x + t.p3.x;
+  float tp3y = t.pos.y + t.p3.y;
   
-  int xl =tp1x <= tp2x && tp1x <= tp3x ? tp1x : ( tp2x <= tp3x ? tp2x : tp3x);
-  int xr =tp1x >= tp2x && tp1x >= tp3x ? tp1x : ( tp2x >= tp3x ? tp2x : tp3x);
-  int yl =tp1y <= tp2y && tp1y <= tp3y ? tp1y : ( tp2y <= tp3y ? tp2y : tp3y);
-  int yr =tp1y >= tp2y && tp1y >= tp3y ? tp1y : ( tp2y >= tp3y ? tp2y : tp3y);
+  int xl =(int) floor(tp1x <= tp2x && tp1x <= tp3x ? tp1x : ( tp2x <= tp3x ? tp2x : tp3x));
+  int xr =(int) floor(tp1x >= tp2x && tp1x >= tp3x ? tp1x : ( tp2x >= tp3x ? tp2x : tp3x));
+  int yl =(int) floor(tp1y <= tp2y && tp1y <= tp3y ? tp1y : ( tp2y <= tp3y ? tp2y : tp3y));
+  int yr =(int) floor(tp1y >= tp2y && tp1y >= tp3y ? tp1y : ( tp2y >= tp3y ? tp2y : tp3y));
 
   xl = 0<=xl ? xl : 0;
   xr = xr < WIDTH ? xr : WIDTH;
   yl = 0<=yl ? yl : 0;
   yr = yr < HEIGHT ? yr : HEIGHT;
 
-  int dp1p2x = tp2x - tp1x;
-  int dp1p2y = tp2y - tp1y;
-  int dp2p3x = tp3x - tp2x;
-  int dp2p3y = tp3y - tp2y;
-  int dp3p1x = tp1x - tp3x;
-  int dp3p1y = tp1y - tp3y;
+  int dp1p2x = (int) floor(tp2x - tp1x);
+  int dp1p2y = (int) floor(tp2y - tp1y);
+  int dp2p3x = (int) floor(tp3x - tp2x);
+  int dp2p3y = (int) floor(tp3y - tp2y);
+  int dp3p1x = (int) floor(tp1x - tp3x);
+  int dp3p1y = (int) floor(tp1y - tp3y);
 
-  int stp1x = dp1p2y * tp1x;
-  int stp1y = dp1p2x * tp1y;
-  int stp2x = dp2p3y * tp2x;
-  int stp2y = dp2p3x * tp2y;
-  int stp3x = dp3p1y * tp3x;
-  int stp3y = dp3p1x * tp3y;
+  int stp1x = (int) floor(dp1p2y * tp1x);
+  int stp1y = (int) floor(dp1p2x * tp1y);
+  int stp2x = (int) floor(dp2p3y * tp2x);
+  int stp2y = (int) floor(dp2p3x * tp2y);
+  int stp3x = (int) floor(dp3p1y * tp3x);
+  int stp3y = (int) floor(dp3p1x * tp3y);
 
-  int C1 = stp1x - stp1y;
-  int C2 = stp2x - stp2y;
-  int C3 = stp3x - stp3y;
+  int C1 = (int) floor(stp1x - stp1y);
+  int C2 = (int) floor(stp2x - stp2y);
+  int C3 = (int) floor(stp3x - stp3y);
 
   int sstp1 = yl * dp1p2x - xl * dp1p2y + C1;
   int sstp2 = yl * dp2p3x - xl * dp2p3y + C2;
@@ -345,10 +347,10 @@ int init_scene(uint32_t *pixels) {
 	.dy = 100};
 
   tri_a = (Triangle) {
-	.pos = {.x=WIDTH/2, .y=HEIGHT/2},
-	.p1 = {.x = -100, .y = 0},
-	.p2 = {.x = 100, .y = 0},
-	.p3 = {.x = 0, .y = 100},
+	.pos = {.x=WIDTH/2., .y=HEIGHT/2.},
+	.p1 = {.x = -50., .y = 50.},
+	.p2 = {.x = 50., .y = 50.},
+	.p3 = {.x = 0., .y = -100.},
   };
   
   return 0;
@@ -388,15 +390,20 @@ int update_scene(uint32_t *pixels) {
   rect_c.angle += .01;
 
   draw_tria(pixels, tri_a, RED);
-  tri_a.p1.x = (int) ((tri_a.p1.x+0.5) * cos(.001) - (tri_a.p1.x+ 0.5) * sin(.001));
-  tri_a.p1.y = (int) ((tri_a.p1.x+0.5) * sin(.001) + (tri_a.p1.y+ 0.5) * cos(.001));
-  tri_a.p2.x = (int) ((tri_a.p2.x+0.5) * cos(.001) - (tri_a.p2.x+ 0.5) * sin(.001));
-  tri_a.p2.y = (int) ((tri_a.p2.x+0.5) * sin(.001) + (tri_a.p2.y+ 0.5) * cos(.001));
-  tri_a.p3.x = (int) ((tri_a.p3.x+0.5) * cos(.001) - (tri_a.p3.x+ 0.5) * sin(.001));
-  tri_a.p3.y = (int) ((tri_a.p3.x+0.5) * sin(.001) + (tri_a.p3.y+ 0.5) * cos(.001));
-	
+  float tri_ap1x = tri_a.p1.x * cos(.01) - tri_a.p1.y * sin(.01);
+  float tri_ap1y = tri_a.p1.x * sin(.01) + tri_a.p1.y * cos(.01);
+  float tri_ap2x = tri_a.p2.x * cos(.01) - tri_a.p2.y * sin(.01);
+  float tri_ap2y = tri_a.p2.x * sin(.01) + tri_a.p2.y * cos(.01);
+  float tri_ap3x = tri_a.p3.x * cos(.01) - tri_a.p3.y * sin(.01);
+  float tri_ap3y = tri_a.p3.x * sin(.01) + tri_a.p3.y * cos(.01);
 
-  
+  tri_a.p1.x = tri_ap1x;
+  tri_a.p1.y = tri_ap1y;
+  tri_a.p2.x = tri_ap2x;
+  tri_a.p2.y = tri_ap2y;
+  tri_a.p3.x = tri_ap3x;
+  tri_a.p3.y = tri_ap3y;
+
   return 0;
 }
 
