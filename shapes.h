@@ -1,17 +1,7 @@
-#include "stdio.h"
 #include "stdlib.h"
 #include "stdbool.h"
 #include "stdint.h"
-#include "errno.h"
 #include "math.h"
-
-#include <X11/Xlib.h>
-#include <X11/extensions/XShm.h>
-
-#define WIDTH 800
-#define HEIGHT 600
-#define MAG 50
-
 
 
 #ifndef SHAPES
@@ -121,15 +111,15 @@ int draw_ball(iDisplay display, Ball ball, float bt, Color color) {
   int ry = (int) floor(ball.c.y + ball.mag);
 
   lx = lx < 0 ? 0 : lx;
-  rx = rx >= WIDTH ? WIDTH - 1 : rx;
+  rx = rx >= display.w ? display.w - 1 : rx;
   ly = ly < 0 ? 0 : ly;
-  ry = ry >= HEIGHT ? HEIGHT - 1 : ry;
+  ry = ry >= display.h ? display.h - 1 : ry;
   
   for (int i =lx; i<=rx; i++) {
 	for (int j=ly; j<=ry; j++) {
 	  float dist = sqrt(pow((float)i-ball.c.x,2) + pow((float)j-ball.c.y,2));
 
-	  if (ball.mag-bt < dist && dist <= ball.mag) display.pixels[j*WIDTH + i] = CToUi32(color);
+	  if (ball.mag-bt < dist && dist <= ball.mag) display.pixels[j*display.w + i] = CToUi32(color);
 	}
   }
 
@@ -143,15 +133,15 @@ int draw_ball_filled(iDisplay display, Ball ball, Color color) {
   int ry = (int) floor(ball.c.y + ball.mag);
 
   lx = lx < 0 ? 0 : lx;
-  rx = rx >= WIDTH ? WIDTH - 1 : rx;
+  rx = rx >= display.w ? display.w - 1 : rx;
   ly = ly < 0 ? 0 : ly;
-  ry = ry >= HEIGHT ? HEIGHT - 1 : ry;
+  ry = ry >= display.h ? display.h - 1 : ry;
   
   for (int i =lx; i<=rx; i++) {
 	for (int j=ly; j<=ry; j++) {
 	  float dist = sqrt((float) (i-ball.c.x)*(i-ball.c.x) + (float) (j-ball.c.y)*(j-ball.c.y));
 
-	  if (dist <= ball.mag) display.pixels[j*WIDTH + i] = CToUi32(color);
+	  if (dist <= ball.mag) display.pixels[j*display.w + i] = CToUi32(color);
 	}
   }
 
@@ -217,13 +207,13 @@ int draw_rect(iDisplay display, Rect rect, Color color) {
   int ry = rect.c.y + rect.dy;
 
   lx = lx < 0 ? 0 : lx;
-  rx = rx >= WIDTH ? WIDTH - 1 : rx;
+  rx = rx >= display.w ? display.w - 1 : rx;
   ly = ly < 0 ? 0 : ly;
-  ry = ry >= HEIGHT ? HEIGHT - 1 : ry;
+  ry = ry >= display.h ? display.h - 1 : ry;
 
   for (int i = lx; i<=rx; i++) {
 	for (int j = ly; j<=ry; j++) {
-	  display.pixels[j*WIDTH + i] = CToUi32(color);
+	  display.pixels[j*display.w + i] = CToUi32(color);
 	}
   }
 
@@ -257,8 +247,8 @@ int draw_rect_filled(iDisplay display, Rect rect, Color color) {
 		int di = i + (int) floor(rect.c.x);
 		int dj = j + (int) floor(rect.c.y);
 	  
-		if (0<=di && di<WIDTH && 0<=dj && dj<HEIGHT) {
-		  display.pixels[dj*WIDTH + di] = CToUi32(color);
+		if (0<=di && di<display.w && 0<=dj && dj<display.h) {
+		  display.pixels[dj*display.w + di] = CToUi32(color);
 		}
 	  }
 
@@ -330,9 +320,9 @@ int draw_tria(iDisplay display, Tria t, Color color) {
   int yr =(int) floor(tp1y >= tp2y && tp1y >= tp3y ? tp1y : ( tp2y >= tp3y ? tp2y : tp3y));
 
   xl = 0<=xl ? xl : 0;
-  xr = xr < WIDTH ? xr : WIDTH;
+  xr = xr < display.w ? xr : display.w;
   yl = 0<=yl ? yl : 0;
-  yr = yr < HEIGHT ? yr : HEIGHT;
+  yr = yr < display.h ? yr : display.h;
 
   int dp1p2x = (int) floor(tp2x - tp1x);
   int dp1p2y = (int) floor(tp2y - tp1y);
@@ -364,7 +354,7 @@ int draw_tria(iDisplay display, Tria t, Color color) {
 	  if (i_sstp1 > 0 &&
 		  i_sstp2 > 0 &&
 		  i_sstp3 > 0) {
-		  display.pixels[j*WIDTH + i] = CToUi32(color);
+		  display.pixels[j*display.w + i] = CToUi32(color);
 	  }
 	  i_sstp1 -= dp1p2y;
 	  i_sstp2 -= dp2p3y;
@@ -392,9 +382,9 @@ int draw_tria_rainbow(iDisplay display, Tria t) {
   int yr =(int) floor(tp1y >= tp2y && tp1y >= tp3y ? tp1y : ( tp2y >= tp3y ? tp2y : tp3y));
 
   xl = 0<=xl ? xl : 0;
-  xr = xr < WIDTH ? xr : WIDTH;
+  xr = xr < display.w ? xr : display.w;
   yl = 0<=yl ? yl : 0;
-  yr = yr < HEIGHT ? yr : HEIGHT;
+  yr = yr < display.h ? yr : display.h;
 
   int dp1p2x = (int) floor(tp2x - tp1x);
   int dp1p2y = (int) floor(tp2y - tp1y);
@@ -439,7 +429,7 @@ int draw_tria_rainbow(iDisplay display, Tria t) {
 			.r = (uint8_t)(0xFF * ((float)(sstp1__) / (float)(sstp1_))),
 			.g = (uint8_t)(0xFF * ((float)(sstp2__) / (float)(sstp2_))),
 			.b = (uint8_t)(0xFF * ((float)(sstp3__) / (float)(sstp3_)))};
-		  display.pixels[j*WIDTH + i] = CToUi32(color);
+		  display.pixels[j*display.w + i] = CToUi32(color);
 	  }
 	  i_sstp1 -= dp1p2y;
 	  i_sstp2 -= dp2p3y;
