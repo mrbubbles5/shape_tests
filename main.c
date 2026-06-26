@@ -12,6 +12,11 @@
 #define HEIGHT 600
 #define MAG 50
 
+typedef struct iDisplay {
+  int w, h;
+  uint32_t *pixels;
+} iDisplay;
+
 
 typedef struct Pos {
   int x,y;
@@ -72,6 +77,40 @@ typedef struct Triangle {
 
 Triangle tri_a;
 
+Triangle create_equ_tri(Posf center, float s, float r) {
+  float p1x = ((-s/2.) * cos(r) - (-sqrt(3)*(1./2.)*s) * sin(r));
+  float p1y = ((-s/2.) * sin(r) + (-sqrt(3)*(1./2.)*s) * cos(r));
+  float p2x = ((s) * cos(r));
+  float p2y = ((s) * sin(r));
+  float p3x = ((-s/2.) * cos(r) - (sqrt(3)*(1./2.)*s) * sin(r));
+  float p3y = ((-s/2.) * sin(r) + (sqrt(3)*(1./2.)*s) * cos(r));
+  
+  Triangle t = {
+	.pos = center,
+	.p1 = {.x = p1x, .y = p1y},
+	.p2 = {.x = p2x, .y = p2y},
+	.p3 = {.x = p3x, .y = p3y},
+  };
+  return t;
+}
+
+Triangle rotate_tri(Triangle t, float r) {
+  float p1x = ((t.p1.x) * cos(r) - (t.p1.y) * sin(r));
+  float p1y = ((t.p1.x) * sin(r) + (t.p1.y) * cos(r));
+  float p2x = ((t.p2.x) * cos(r) - (t.p2.y) * sin(r));
+  float p2y = ((t.p2.x) * sin(r) + (t.p2.y) * cos(r));
+  float p3x = ((t.p3.x) * cos(r) - (t.p3.y) * sin(r));
+  float p3y = ((t.p3.x) * sin(r) + (t.p3.y) * cos(r));
+
+  t.p1.x = p1x;
+  t.p1.y = p1y;
+  t.p2.x = p2x;
+  t.p2.y = p2y;
+  t.p3.x = p3x;
+  t.p3.y = p3y;
+
+  return t;
+}
 
 bool keymap[256] = {0};
 
@@ -88,7 +127,7 @@ typedef struct Color {
 #define CToUi32(color) (uint32_t) color.a<<24 | color.r << 16 | color.g << 8 | color.b 
 
 
-int draw_ball(uint32_t *pixels, Ball ball, float bt, Color color) {
+int draw_ball(iDisplay display, Ball ball, float bt, Color color) {
   int lx = ball.pos.x - ball.mag;
   int rx = ball.pos.x + ball.mag;
   int ly = ball.pos.y - ball.mag;
@@ -103,14 +142,14 @@ int draw_ball(uint32_t *pixels, Ball ball, float bt, Color color) {
 	for (int j=ly; j<=ry; j++) {
 	  float dist = sqrt(pow((float)i-ball.pos.x,2) + pow((float)j-ball.pos.y,2));
 
-	  if (ball.mag-bt < dist && dist <= ball.mag) pixels[j*WIDTH + i] = CToUi32(color);
+	  if (ball.mag-bt < dist && dist <= ball.mag) display.pixels[j*WIDTH + i] = CToUi32(color);
 	}
   }
 
   return 0;
 }
 
-int draw_ball_filled(uint32_t *pixels, Ball ball, Color color) {
+int draw_ball_filled(iDisplay display, Ball ball, Color color) {
   int lx = ball.pos.x - ball.mag;
   int rx = ball.pos.x + ball.mag;
   int ly = ball.pos.y - ball.mag;
@@ -125,7 +164,7 @@ int draw_ball_filled(uint32_t *pixels, Ball ball, Color color) {
 	for (int j=ly; j<=ry; j++) {
 	  float dist = sqrt((float) (i-ball.pos.x)*(i-ball.pos.x) + (float) (j-ball.pos.y)*(j-ball.pos.y));
 
-	  if (dist <= ball.mag) pixels[j*WIDTH + i] = CToUi32(color);
+	  if (dist <= ball.mag) display.pixels[j*WIDTH + i] = CToUi32(color);
 	}
   }
 
@@ -133,7 +172,7 @@ int draw_ball_filled(uint32_t *pixels, Ball ball, Color color) {
 }
 
 // NOTE: b would be more accurate by using a norm. Maybe later
-int draw_rect_filled(uint32_t *pixels, Rect rect, Color color) {
+int draw_rect_filled(iDisplay display, Rect rect, Color color) {
   float rx = (cos(-rect.angle) - sin(-rect.angle)) * .5;
   float ry = (sin(-rect.angle) + cos(-rect.angle)) * .5;
 
@@ -158,7 +197,7 @@ int draw_rect_filled(uint32_t *pixels, Rect rect, Color color) {
 		int dj = j + rect.pos.y;
 	  
 		if (0<=di && di<WIDTH && 0<=dj && dj<HEIGHT) {
-		  pixels[dj*WIDTH + di] = CToUi32(color);
+		  display.pixels[dj*WIDTH + di] = CToUi32(color);
 		}
 	  }
 	}
@@ -168,7 +207,7 @@ int draw_rect_filled(uint32_t *pixels, Rect rect, Color color) {
 }
 
 // NOTE: Order of points is assumed to be clockwise.
-int draw_tria(uint32_t *pixels, Triangle t, Color color) {
+int draw_tria(iDisplay display, Triangle t, Color color) {
   float tp1x = t.pos.x + t.p1.x;
   float tp1y = t.pos.y + t.p1.y;
   float tp2x = t.pos.x + t.p2.x;
@@ -216,7 +255,82 @@ int draw_tria(uint32_t *pixels, Triangle t, Color color) {
 	  if (i_sstp1 > 0 &&
 		  i_sstp2 > 0 &&
 		  i_sstp3 > 0) {
-		  pixels[j*WIDTH + i] = CToUi32(color);
+		  display.pixels[j*WIDTH + i] = CToUi32(color);
+	  }
+	  i_sstp1 -= dp1p2y;
+	  i_sstp2 -= dp2p3y;
+	  i_sstp3 -= dp3p1y;
+	}
+	sstp1 += dp1p2x;
+	sstp2 += dp2p3x;
+	sstp3 += dp3p1x;
+  }
+
+  return 0;
+}
+
+int draw_tria_rainbow(iDisplay display, Triangle t) {
+  float tp1x = t.pos.x + t.p1.x;
+  float tp1y = t.pos.y + t.p1.y;
+  float tp2x = t.pos.x + t.p2.x;
+  float tp2y = t.pos.y + t.p2.y;
+  float tp3x = t.pos.x + t.p3.x;
+  float tp3y = t.pos.y + t.p3.y;
+  
+  int xl =(int) floor(tp1x <= tp2x && tp1x <= tp3x ? tp1x : ( tp2x <= tp3x ? tp2x : tp3x));
+  int xr =(int) floor(tp1x >= tp2x && tp1x >= tp3x ? tp1x : ( tp2x >= tp3x ? tp2x : tp3x));
+  int yl =(int) floor(tp1y <= tp2y && tp1y <= tp3y ? tp1y : ( tp2y <= tp3y ? tp2y : tp3y));
+  int yr =(int) floor(tp1y >= tp2y && tp1y >= tp3y ? tp1y : ( tp2y >= tp3y ? tp2y : tp3y));
+
+  xl = 0<=xl ? xl : 0;
+  xr = xr < WIDTH ? xr : WIDTH;
+  yl = 0<=yl ? yl : 0;
+  yr = yr < HEIGHT ? yr : HEIGHT;
+
+  int dp1p2x = (int) floor(tp2x - tp1x);
+  int dp1p2y = (int) floor(tp2y - tp1y);
+  int dp2p3x = (int) floor(tp3x - tp2x);
+  int dp2p3y = (int) floor(tp3y - tp2y);
+  int dp3p1x = (int) floor(tp1x - tp3x);
+  int dp3p1y = (int) floor(tp1y - tp3y);
+
+  int stp1x = (int) floor(dp1p2y * tp1x);
+  int stp1y = (int) floor(dp1p2x * tp1y);
+  int stp2x = (int) floor(dp2p3y * tp2x);
+  int stp2y = (int) floor(dp2p3x * tp2y);
+  int stp3x = (int) floor(dp3p1y * tp3x);
+  int stp3y = (int) floor(dp3p1x * tp3y);
+
+  int C1 = (int) floor(stp1x - stp1y);
+  int C2 = (int) floor(stp2x - stp2y);
+  int C3 = (int) floor(stp3x - stp3y);
+
+  int sstp1 = yl * dp1p2x - xl * dp1p2y + C1;
+  int sstp2 = yl * dp2p3x - xl * dp2p3y + C2;
+  int sstp3 = yl * dp3p1x - xl * dp3p1y + C3;
+
+  int sstp1_ = tp3y * dp1p2x - tp3x * dp1p2y + C1;
+  int sstp2_ = tp1y * dp2p3x - tp1x * dp2p3y + C2;
+  int sstp3_ = tp2y * dp3p1x - tp2x * dp3p1y + C3;
+  
+  for (int j = yl; j<yr; j++) {
+  	int i_sstp1 = sstp1;
+	int i_sstp2 = sstp2;
+	int i_sstp3 = sstp3;
+	for (int i = xl; i<xr; i++) {
+	  if (i_sstp1 > 0 &&
+		  i_sstp2 > 0 &&
+		  i_sstp3 > 0) {
+		  int sstp1__ = j * dp1p2x - i * dp1p2y + C1;
+		  int sstp2__ = j * dp2p3x - i * dp2p3y + C2;
+		  int sstp3__ = j * dp3p1x - i * dp3p1y + C3;
+
+		  Color color = {
+			.a = 0xFF,
+			.r = (uint8_t)(0xFF * ((float)(sstp1__) / (float)(sstp1_))),
+			.g = (uint8_t)(0xFF * ((float)(sstp2__) / (float)(sstp2_))),
+			.b = (uint8_t)(0xFF * ((float)(sstp3__) / (float)(sstp3_)))};
+		  display.pixels[j*WIDTH + i] = CToUi32(color);
 	  }
 	  i_sstp1 -= dp1p2y;
 	  i_sstp2 -= dp2p3y;
@@ -231,7 +345,7 @@ int draw_tria(uint32_t *pixels, Triangle t, Color color) {
 }
 
 
-int draw_rect(uint32_t *pixels, Rect rect, float bt, Color color) {
+int draw_rect(iDisplay display, Rect rect, float bt, Color color) {
   int lx = rect.pos.x - rect.dx;
   int rx = rect.pos.x + rect.dx;
   int ly = rect.pos.y - rect.dy;
@@ -244,7 +358,7 @@ int draw_rect(uint32_t *pixels, Rect rect, float bt, Color color) {
 
   for (int i = lx; i<=rx; i++) {
 	for (int j = ly; j<=ry; j++) {
-	  pixels[j*WIDTH + i] = CToUi32(color);
+	  display.pixels[j*WIDTH + i] = CToUi32(color);
 	}
   }
 
@@ -328,8 +442,8 @@ Ball update_position(Ball ball, Pos move) {
 }
 
 
-int init_scene(uint32_t *pixels) {
-  draw_ball_filled(pixels, ball, RED);
+int init_scene(iDisplay display) {
+  draw_ball_filled(display, ball, RED);
 
   rect_l = (Rect) {
 	.pos = {.x=0, .y=HEIGHT-1},
@@ -346,63 +460,46 @@ int init_scene(uint32_t *pixels) {
 	.dx = 100,
 	.dy = 100};
 
-  tri_a = (Triangle) {
-	.pos = {.x=WIDTH/2., .y=HEIGHT/2.},
-	.p1 = {.x = -50., .y = 50.},
-	.p2 = {.x = 50., .y = 50.},
-	.p3 = {.x = 0., .y = -100.},
-  };
+  tri_a = create_equ_tri((Posf){.x=WIDTH/2., .y=HEIGHT/2.}, 100., M_PI/4.);
   
   return 0;
 }
 
-int clear_scene(uint32_t *pixels, Color color) {
+int clear_scene(iDisplay display, Color color) {
   for (int i =0; i<WIDTH; i++) {
 	for (int j=0; j<HEIGHT; j++) {
-	  pixels[j*WIDTH + i] = CToUi32(color);
+	  display.pixels[j*WIDTH + i] = CToUi32(color);
 	}
   }
   
   return 0;
 }
 
-int update_scene(uint32_t *pixels) {  
+int update_scene(iDisplay display) {  
   update_move();
   ball = update_position(ball, move);
   
-  draw_ball(pixels, ball, 1.,  RED);
-  draw_ball_filled(pixels, ball_l, BLUE);
-  draw_ball_filled(pixels, ball_r, GREEN);
+  draw_ball(display, ball, 1.,  RED);
+  draw_ball_filled(display, ball_l, BLUE);
+  draw_ball_filled(display, ball_r, GREEN);
 
   if (rect_collision(rect_l, ball, true)) {
-	draw_rect_filled(pixels, rect_l, RED);
+	draw_rect_filled(display, rect_l, RED);
   } else {
-	draw_rect_filled(pixels, rect_l, WHITE);
+	draw_rect_filled(display, rect_l, WHITE);
   }
-  if (rect_collision(rect_r, ball, true)) draw_rect_filled(pixels, rect_r, RED);
-  else draw_rect_filled(pixels, rect_r, WHITE);
+  if (rect_collision(rect_r, ball, true)) draw_rect_filled(display, rect_r, RED);
+  else draw_rect_filled(display, rect_r, WHITE);
   
   move.x = 0;
   move.y = 0;
 
   
-  //draw_rect_filled(pixels, rect_c, RED);
+  //draw_rect_filled(pdisplay.ixels, rect_c, RED);
   rect_c.angle += .01;
 
-  draw_tria(pixels, tri_a, RED);
-  float tri_ap1x = tri_a.p1.x * cos(.01) - tri_a.p1.y * sin(.01);
-  float tri_ap1y = tri_a.p1.x * sin(.01) + tri_a.p1.y * cos(.01);
-  float tri_ap2x = tri_a.p2.x * cos(.01) - tri_a.p2.y * sin(.01);
-  float tri_ap2y = tri_a.p2.x * sin(.01) + tri_a.p2.y * cos(.01);
-  float tri_ap3x = tri_a.p3.x * cos(.01) - tri_a.p3.y * sin(.01);
-  float tri_ap3y = tri_a.p3.x * sin(.01) + tri_a.p3.y * cos(.01);
-
-  tri_a.p1.x = tri_ap1x;
-  tri_a.p1.y = tri_ap1y;
-  tri_a.p2.x = tri_ap2x;
-  tri_a.p2.y = tri_ap2y;
-  tri_a.p3.x = tri_ap3x;
-  tri_a.p3.y = tri_ap3y;
+  draw_tria_rainbow(display, tri_a);
+  tri_a = rotate_tri(tri_a, 1);
 
   return 0;
 }
@@ -439,15 +536,20 @@ int main(void)
     XShmSegmentInfo	 shminfo = {0};
 
 	uint32_t	pixels[WIDTH*HEIGHT];
+	iDisplay d = {
+	  .w = WIDTH,
+	  .h = HEIGHT,
+	  .pixels = pixels,
+	};
 	
 	image = XCreateImage(display,
 						 wa.visual,
 						 wa.depth,
 						 ZPixmap,
 						 0,
-						 (char*) &pixels,
-						 WIDTH,
-						 HEIGHT,
+						 (char*) (d.pixels),
+						 d.w,
+						 d.h,
 						 32,
 						 WIDTH *	sizeof(uint32_t));
 
@@ -467,7 +569,7 @@ int main(void)
 
     int quit = 0;
 
-	init_scene(pixels);
+	init_scene(d);
 	
     while (!quit) {  
 	  while (XPending(display) > 0) {
@@ -475,11 +577,11 @@ int main(void)
 		XNextEvent(display, &event);
 		switch (event.type) {
 		case KeyPress: {
-		  switch (XLookupKeysym(&event.xkey, 0)) {
+		  char key = XLookupKeysym(&event.xkey, 0); 
+		  switch (key) {
 		  case 'q':
-			quit	  = 1;
+			quit = 1;
 			break;
-			
 		  case 'w':
 		    keymap['w'] = true;
 			break;
@@ -492,13 +594,16 @@ int main(void)
 		  case 'd':
 		    keymap['d'] = true;
 			break;
+		  default:
+			printf("This key was released %c\n", key);
 		  }
 		}	  
 		  break;
 	   
 		  
 		case KeyRelease: {
-		  switch(XLookupKeysym(&event.xkey, 0)) {
+		  char key = XLookupKeysym(&event.xkey, 0);
+		  switch(key) {
 		  case 'w':
 		    keymap['w'] = false;
 			break;
@@ -512,14 +617,14 @@ int main(void)
 		    keymap['d'] = false;
 			break;
 		  default:
-			printf("Never reaches this\n");
+			printf("This key was released %c\n", key);
 		  }
 		}
 		  break;
 
 		case ClientMessage: {
 		  if ((Atom) event.xclient.data.l[0] == wm_delete_window) {
-			quit							  = 1;
+			quit = 1;
 		  }
 		}
 		  break;
@@ -530,12 +635,13 @@ int main(void)
 		}
 	  }
 	  
-	  clear_scene(pixels, BLACK);
-	  update_scene(pixels);
-	  XPutImage(display, window, gc, image, 0,0,0,0, WIDTH, HEIGHT);
+	  clear_scene(d, BLACK);
+	  update_scene(d);
+	  XPutImage(display, window, gc, image, 0,0,0,0, d.w, d.h);
 	}
 	
     XCloseDisplay(display);
 	
     return 0;
 }
+
