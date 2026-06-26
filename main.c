@@ -1,9 +1,8 @@
 #include "stdio.h"
-#include "stdlib.h"
 #include "stdbool.h"
 #include "stdint.h"
+#include "time.h"
 #include "errno.h"
-#include "math.h"
 
 #include <X11/Xlib.h>
 #include <X11/extensions/XShm.h>
@@ -15,11 +14,14 @@
 #define HEIGHT 600
 #define MAG 50
 
+double global_time = 0.;
+
+
 
 v2f move = {0};
 v2f gravitation = {.y=1};
 
-Tria tri_a;
+Tria tri_a, tri_b, tri_c, tri_d;
 Ball ball, ball_l, ball_r;
 Rect rect_l, rect_r, rect_c, screen_border;
 
@@ -62,7 +64,7 @@ Ball update_position(Ball ball, v2f move) {
 int init_scene(iDisplay display) {
   v2f ball_pos = {.x=WIDTH/2., .y=WIDTH/2.};
   ball = ball_create(ball_pos, 50);
-  ball_pos = (v2f) {.x=0., .y=0.};
+  ball_pos = (v2f) {.x=(float) WIDTH, .y=100.};
   ball_l = ball_create(ball_pos, 100);
   ball_pos = (v2f) {.x=(float) WIDTH, .y=0.};
   ball_r = ball_create(ball_pos, 100);
@@ -76,7 +78,7 @@ int init_scene(iDisplay display) {
 					   100., 100.,
 					   0.);
 
-  rect_c = rect_create((v2f) {.x=WIDTH/2., .y=HEIGHT/4.},
+  rect_c = rect_create((v2f) {.x=0., .y=0.},
 					   100., 100.,
 					   0.125*M_PI);
 
@@ -85,6 +87,9 @@ int init_scene(iDisplay display) {
 							  0.);
 
   tri_a = tria_create_equ((v2f){.x=WIDTH/2., .y=3*HEIGHT/4.}, 100., M_PI/4.);
+  tri_b = tria_create_equ((v2f){.x=0.f, .y=3*HEIGHT/4.}, 100., M_PI/4.);
+  tri_c = tria_create_equ((v2f){.x=WIDTH*1.-1, .y=3*HEIGHT/4.}, 100., M_PI/4.);
+  tri_d = tria_create_equ((v2f){.x=WIDTH/2., .y=0.f}, 100., M_PI/4.);
   
   return 0;
 }
@@ -125,7 +130,14 @@ int update_scene(iDisplay display) {
   rect_c.a += .01;
 
   draw_tria_rainbow(display, tri_a);
-  tri_a = tria_rotate(tri_a, .01);
+  tri_a = tria_rotate(tri_a, 0.01*global_time);
+  draw_tria_rainbow(display, tri_b);
+  tri_b = tria_rotate(tri_b, 0.01*global_time);
+  draw_tria_rainbow(display, tri_c);
+  tri_c = tria_rotate(tri_c, 0.01*global_time);
+  draw_tria_rainbow(display, tri_d);
+  tri_d = tria_rotate(tri_d, 0.01*global_time);
+
 
   return 0;
 }
@@ -188,15 +200,22 @@ int main(void)
 
     XMapWindow(display, window);
 
-    float	global_time = 0.0f;
-
     int CompletionType = XShmGetEventBase (display) + ShmCompletion;
 
     int quit = 0;
 
 	init_scene(d);
+
+	double target_fps = 60.0f;
+	double current_fps = 0.f;
 	
-    while (!quit) {  
+	int cycle_count = 5;
+	int cycle = cycle_count;
+	static struct timespec frame_t;
+	static struct timespec cycle_start;
+	clock_gettime(CLOCK_MONOTONIC, &cycle_start);
+
+	while (!quit) {
 	  while (XPending(display) > 0) {
 		XEvent	event = {0};
 		XNextEvent(display, &event);
@@ -263,6 +282,20 @@ int main(void)
 	  clear_scene(d, BLACK);
 	  update_scene(d);
 	  XPutImage(display, window, gc, image, 0,0,0,0, d.w, d.h);
+
+	  cycle -= 1;
+	  
+	  if (cycle==0) {
+	    clock_gettime(CLOCK_MONOTONIC, &frame_t);
+		
+		current_fps = cycle_count / ((frame_t.tv_sec - cycle_start.tv_sec) + ((double)(frame_t.tv_nsec - cycle_start.tv_nsec)) / 1e9);
+		global_time = target_fps / current_fps;
+
+		printf("fps: %lf\n", current_fps);
+
+		cycle = cycle_count;
+	    clock_gettime(CLOCK_MONOTONIC, &cycle_start);
+	  }
 	}
 	
     XCloseDisplay(display);
