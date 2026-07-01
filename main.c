@@ -7,6 +7,7 @@
 #include <X11/Xlib.h>
 #include <X11/extensions/XShm.h>
 
+//#define DEBUG
 #define SHAPES_IMPL
 #include "shapes.h"
 
@@ -14,55 +15,24 @@
 #define HEIGHT 600
 #define MAG 50
 
-double global_time = 0.;
 
+// TODO: remove display
+
+
+
+
+
+double global_time = 0.;
 
 
 v2f move = {0};
 v2f gravitation = {.y=1};
 
 Tria tri_a, tri_b, tri_c, tri_d;
-Ball ball, ball_l, ball_r;
+Ball ball, ball_l, ball_r, ball_c;
 Rect rect_l, rect_r, rect_c, screen_border;
 
-bool keymap[256] = {0};
-
-int find_orthogonal(iDisplay display, v2f p11, v2f p12, v2f p21, int sa) {
-  draw_line(display, p11, p21, BLUE);
-  draw_line(display, p12, p21, BLUE);
-  
-  float d_p11p12x = p12.x - p11.x;
-  float d_p11p12y = p12.y - p11.y;
-  v2f pc = {.x=p11.x + 1/(float)sa*d_p11p12x, .y=p11.y + 1/(float)sa*d_p11p12y};
- 	
-  for (int i=1; i<=sa; i++) {
-	v2f dpcb = {.x=pc.x-p21.x,
-				.y=pc.y-p21.y};
-	float d1 = sqrt(pow(dpcb.x,2) + pow(dpcb.y,2));
-	
-	v2f dp1p2 = {.x = p11.x-p12.x,
-				 .y = p11.y - p12.y};
-	float d2 = sqrt(pow(dp1p2.x,2) + pow(dp1p2.y,2));
-	
-	float dot = (dpcb.x/d1)*(dp1p2.x/d2) + (dpcb.y/d1)*(dp1p2.y/d2);
-
-	if (dot < 1./(2*sa) && dot >= -1./(2*sa)) {
-	  draw_line(display, p21, pc, GREEN);
-	} else {
-	  draw_line(display, p21, pc, RED);
-	}
- 	 
-
-	
-	pc.x += d_p11p12x/(float)sa;
-	pc.y += d_p11p12y/(float)sa;
-  }
-
-  return 0;
-}
-
-
-
+bool keymap[256] = {0}; 
 
 int update_move() {
   if (keymap['w']) move.y -= 2.;
@@ -82,14 +52,14 @@ Ball update_position(Ball ball, v2f move) {
 	.mag = ball.mag,
   };
 
-  BLOCKED_DIR dir = rect_ball_collision(screen_border, vBall, false);
+  v2f dir = rect_ball_collision(screen_border, vBall, 64, false);
 
-  if (dir==NONE) {
+  if (dir.x == 0 && dir.y == 0) {
 	ball.c.x = dx;
 	ball.c.y = dy;
-  } else if (dir==X) {
+  } else if (dir.x == 0) {
 	ball.c.y = dy;
-  } else if (dir==Y) {
+  } else if (dir.y == 0) {
 	ball.c.x = dx;
   } 
 
@@ -101,18 +71,18 @@ int init_scene(iDisplay display) {
   v2f ball_pos = {.x=WIDTH/2., .y=WIDTH/2.};
   ball = ball_create(ball_pos, 50);
   ball_pos = (v2f) {.x=(float) WIDTH, .y=100.};
-  ball_l = ball_create(ball_pos, 100);
-  ball_pos = (v2f) {.x=(float) WIDTH, .y=0.};
   ball_r = ball_create(ball_pos, 100);
+  ball_pos = (v2f) {.x=WIDTH/2., .y=HEIGHT/2.};
+  ball_c = ball_create(ball_pos, 300);
   
   draw_ball_filled(display, ball, RED);
 
-  rect_l = rect_create((v2f) {.x=0., .y=HEIGHT-1.},
+  rect_l = rect_create((v2f) {.x=0., .y=HEIGHT},
 					   100., 100.,
-					   0.);
-  rect_r = rect_create((v2f) {.x=WIDTH/2., .y=HEIGHT/2.},
+					   .25*M_PI);
+  rect_r = rect_create((v2f) {.x=WIDTH-1., .y=HEIGHT-1.},
 					   100., 100.,
-					   0.);
+					   .25*M_PI);
 
   rect_c = rect_create((v2f) {.x=0., .y=0.},
 					   100., 100.,
@@ -145,18 +115,58 @@ int clear_scene(iDisplay display, Color color) {
 int update_scene(iDisplay display) {  
   update_move();
   ball = update_position(ball, move);
+
+  v2f cp = ball_ball_collision(ball_r, ball, true);
+  if (cp.x>0 || cp.y>0) {
+	draw_ball_filled(display, ball_r, RED);
+	v2f f = {
+	  .x = .1*(ball.c.x - cp.x),
+	  .y = .1*(ball.c.y - cp.y),
+	};
+	ball = update_position(ball, f);
+  } else {
+	draw_ball_filled(display, ball_r, GREEN);
+  }
+  
+  cp = ball_ball_collision(ball_c, ball, false);
+  if (cp.x>0 || cp.y>0) {
+	draw_ball_filled(display, ball_c, RED);
+	/* v2f f = { */
+	/*   .x = .1*(ball.c.x + cp.x), */
+	/*   .y = .1*(ball.c.y + cp.y), */
+	/* }; */
+	/* ball = update_position(ball, f); */
+  } else {
+	draw_ball_filled(display, ball_c, BLUE);
+  }
+
+  cp = rect_ball_collision(rect_l, ball, 16, true);
+  if (cp.x>0 || cp.y>0) {
+	draw_rect_filled(display, rect_l, RED);
+	v2f f = {
+	  .x = .1*(ball.c.x - cp.x),
+	  .y = .1*(ball.c.y - cp.y),
+	};
+	ball = update_position(ball, f);
+  } else {
+	 draw_rect_filled(display, rect_l, WHITE);
+  }
+
+  cp = rect_ball_collision(rect_r, ball, 16, true);
+  if (cp.x>0 || cp.y>0) {
+	draw_rect_filled(display, rect_r, RED);
+	v2f f = {
+	  .x = .1*(ball.c.x - cp.x),
+	  .y = .1*(ball.c.y - cp.y),
+	};
+	ball = update_position(ball, f);
+  } else {
+	draw_rect_filled(display, rect_r, WHITE);
+  }
+
+  
   
   draw_ball(display, ball, 1.,  RED);
-  draw_ball_filled(display, ball_l, BLUE);
-  draw_ball_filled(display, ball_r, GREEN);
-
-  if (rect_ball_collision(rect_l, ball, true)) {
-	draw_rect_filled(display, rect_l, RED);
-  } else {
-	draw_rect_filled(display, rect_l, WHITE);
-  }
-  if (rect_ball_collision(rect_r, ball, true)) draw_rect_filled(display, rect_r, RED);
-  else draw_rect_filled(display, rect_r, WHITE);
   
   move.x = 0;
   move.y = 0;
@@ -167,71 +177,11 @@ int update_scene(iDisplay display) {
 
   /* draw_tria_rainbow(display, tri_a); */
   /* tri_a = tria_rotate(tri_a, 0.01*global_time); */
-  /* draw_tria_rainbow(display, tri_b); */
-  /* tri_b = tria_rotate(tri_b, 0.01*global_time); */
-  /* draw_tria_rainbow(display, tri_c); */
-  /* tri_c = tria_rotate(tri_c, 0.01*global_time); */
-  /* draw_tria_rainbow(display, tri_d); */
-  /* tri_d = tria_rotate(tri_d, 0.01*global_time); */
 
-
-  float d_btrp1x = ball.c.x-rect_r.c.x-rect_r.p1.x;
-  float d_btrp1y = ball.c.y-rect_r.c.y-rect_r.p1.y;
-  float d_btrp1 = pow(d_btrp1x,2) + pow(d_btrp1y,2);
-  float d_btrp2x = ball.c.x-rect_r.c.x-rect_r.p2.x;
-  float d_btrp2y = ball.c.y-rect_r.c.y-rect_r.p2.y;
-  float d_btrp2 = pow(d_btrp2x,2) + pow(d_btrp2y,2);
-  float d_btrp3x = ball.c.x-rect_r.c.x-rect_r.p3.x;
-  float d_btrp3y = ball.c.y-rect_r.c.y-rect_r.p3.y;
-  float d_btrp3 = pow(d_btrp3x,2) + pow(d_btrp3y,2);
-  float d_btrp4x = ball.c.x-rect_r.c.x-rect_r.p4.x;
-  float d_btrp4y = ball.c.y-rect_r.c.y-rect_r.p4.y;
-  float d_btrp4 = pow(d_btrp4x,2) + pow(d_btrp4y,2);
-
-  float d_rminx;
-  float d_rminy;
-  float d_r_p1_x;
-  float d_r_p1_y;
-  float d_r_m1_x;
-  float d_r_m1_y;
   
-	
-  if (d_btrp1 <= d_btrp2 &&
-	  d_btrp1 <= d_btrp3 &&
-	  d_btrp1 <= d_btrp4) {
-	d_rminx = rect_r.p1.x;
-	d_rminy = rect_r.p1.y;
-	d_r_p1_x = rect_r.p2.x;
-	d_r_p1_y = rect_r.p2.y;
-	d_r_m1_x = rect_r.p4.x;
-	d_r_m1_y = rect_r.p4.y;
-  } else if (d_btrp2 <= d_btrp3 &&
-			 d_btrp2 <= d_btrp4) {
-	d_rminx = rect_r.p2.x;
-	d_rminy = rect_r.p2.y;
-	d_r_p1_x = rect_r.p3.x;
-	d_r_p1_y = rect_r.p3.y;
-	d_r_m1_x = rect_r.p1.x;
-	d_r_m1_y = rect_r.p1.y;
-  } else if (d_btrp3 <= d_btrp4) {
-	d_rminx = rect_r.p3.x;
-	d_rminy = rect_r.p3.y;
-	d_r_p1_x = rect_r.p4.x;
-	d_r_p1_y = rect_r.p4.y;
-	d_r_m1_x = rect_r.p2.x;
-	d_r_m1_y = rect_r.p2.y;
-  } else {
-	d_rminx = rect_r.p4.x;
-	d_rminy = rect_r.p4.y;
-	d_r_p1_x = rect_r.p1.x;
-	d_r_p1_y = rect_r.p1.y;
-	d_r_m1_x = rect_r.p3.x;
-	d_r_m1_y = rect_r.p3.y;
-  }
-
-  v2f p = {.x=rect_r.c.x + d_rminx, .y=rect_r.c.y + d_rminy};
-  v2f p1 = {.x=rect_r.c.x + d_r_p1_x, .y=rect_r.c.y + d_r_p1_y};
-  find_orthogonal(display, p, p1, ball.c, 16);
+  //v2f p = {.x=rect_r.c.x + rect_r.p1.x, .y=rect_r.c.y + rect_r.p1.y};
+  //v2f p1 = {.x=rect_r.c.x + rect_r.p2.x, .y=rect_r.c.y + rect_r.p2.y};
+  //find_orthogonal_visualize(display, p, p1, ball.c, 16);
   
 
 
@@ -274,6 +224,10 @@ int main(void)
 	  .h = HEIGHT,
 	  .pixels = pixels,
 	};
+
+	#ifdef DEBUG
+	debug_display = d;
+    #endif // DEBUG
 	
 	image = XCreateImage(display,
 						 wa.visual,

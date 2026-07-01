@@ -18,10 +18,14 @@ typedef struct Color Color;
 
 
 typedef struct iDisplay iDisplay;
+iDisplay debug_display;
 
 // TODO: lin alg lib
 typedef struct v2i v2i;
 typedef struct v2f v2f;
+
+float v2f_dist_eukl(v2f p1, v2f p2);
+int draw_line(iDisplay display, v2f p1, v2f p2, Color color);
 
 typedef enum BLOCKED_DIR {
   NONE=0,
@@ -33,10 +37,10 @@ typedef enum BLOCKED_DIR {
   Y = 64,
 } BLOCKED_DIR;
 
-int draw_line(iDisplay display, v2f p1, v2f p2, Color color);
 
 typedef struct Ball Ball;
 Ball ball_create(v2f c, float mag);
+v2f ball_ball_collision(Ball b1, Ball b2, bool o);
 
 int draw_ball(iDisplay display, Ball ball, float bt, Color color);
 int draw_ball_filled(iDisplay display, Ball ball, Color color);
@@ -47,7 +51,7 @@ typedef struct Rect Rect;
 Rect rect_quad_create(v2f c, v2f p1, v2f p2, v2f p3, v2f p4);
 Rect rect_create(v2f center, float dx, float dy, float a);
 Rect rect_rotate(Rect r, float a);
-BLOCKED_DIR rect_ball_collision(Rect rect, Ball ball, bool outer);
+v2f rect_ball_collision(Rect rect, Ball ball, int p, bool outer);
 
 int draw_rect(iDisplay display, Rect rect, Color color);
 int draw_rect_filled(iDisplay display, Rect rect, Color color);
@@ -60,6 +64,9 @@ Tria tri_rotate(Tria t, float a);
 
 int draw_tria(iDisplay display, Tria t, Color color);
 int draw_tria_rainbow(iDisplay display, Tria t);
+
+v2f find_orthogonal(v2f p11, v2f p12, v2f p21, int sa);
+v2f find_orthogonal_visualized(iDisplay display, v2f p11, v2f p12, v2f p21, int sa);
 
 
 #ifdef SHAPES_IMPL
@@ -95,20 +102,24 @@ typedef struct v2f {
 
 
 
+float v2f_dist_eukl(v2f p1, v2f p2) {
+  return sqrt(pow(p1.x-p2.x,2) + pow(p1.y-p2.y,2));
+}
+
+
 int draw_line(iDisplay display, v2f p1, v2f p2, Color color){
   float d_p1p2x = p1.x - p2.x;
   float d_p1p2y = p1.y - p2.y;
   float d_p1p2 = sqrt(pow(d_p1p2x,2) + pow(d_p1p2y,2));
   d_p1p2 = d_p1p2==0 ? 1 : d_p1p2;
-
-  display.pixels[(int) floor(p1.y)*display.w + (int) floor(p1.x)] = CToUi32(RED);  
-  display.pixels[(int) floor(p2.y)*display.w + (int) floor(p2.x)] = CToUi32(RED);
   
   for (int i = 0; i <= (int) floor(d_p1p2); i++) {
 	int x = (int) floor(p2.x + i/d_p1p2 * d_p1p2x);
 	int y = (int) floor(p2.y + i/d_p1p2 * d_p1p2y);
 
-	display.pixels[y*display.w + x] = CToUi32(color);
+	if (0<=x && x<display.w && 0<=y && y<display.h) {
+	  display.pixels[y*display.w + x] = CToUi32(color);
+	}
   }
 
   
@@ -126,6 +137,30 @@ Ball ball_create(v2f c, float mag) {
 	.c = c,
 	.mag = mag,
   };
+}
+
+v2f ball_ball_collision(Ball b1, Ball b2, bool o) {
+  float d_b1b2 = v2f_dist_eukl(b1.c,b2.c);
+
+  if (o) {
+	if (d_b1b2 <= (b1.mag + b2.mag)) {
+	  v2f cp = {
+		.x = b1.c.x + b1.mag/(b1.mag + b2.mag) * (b1.c.x - b2.c.x),
+		.y = b1.c.y + b1.mag/(b1.mag + b2.mag) * (b1.c.y - b2.c.y),
+	  };
+	  return cp;
+	}
+  } else {
+	if (d_b1b2 + b2.mag >= b1.mag) {
+	  v2f cp = {
+		.x = - (b2.mag/b1.mag)*(b1.c.x - b2.c.x),
+		.y = - (b2.mag/b1.mag)*(b1.c.y - b2.c.y),
+	  };
+	  return cp;
+	}
+  }
+
+  return (v2f) {0};
 }
 
 int draw_ball(iDisplay display, Ball ball, float bt, Color color) {
@@ -242,75 +277,148 @@ Rect rect_rotate(Rect r, float a) {
 	.p4 = p4}; 
 }
 
-// Collision at the border
-BLOCKED_DIR rect_ball_collision(Rect rect, Ball ball, bool outer) {
-  BLOCKED_DIR mask = NONE;
+v2f rect_ball_collision(Rect r, Ball b, int p, bool o) {
+  float d_btrp1x = b.c.x-r.c.x-r.p1.x;
+  float d_btrp1y = b.c.y-r.c.y-r.p1.y;
+  float d_btrp1 = pow(d_btrp1x,2) + pow(d_btrp1y,2);
+  float d_btrp2x = b.c.x-r.c.x-r.p2.x;
+  float d_btrp2y = b.c.y-r.c.y-r.p2.y;
+  float d_btrp2 = pow(d_btrp2x,2) + pow(d_btrp2y,2);
+  float d_btrp3x = b.c.x-r.c.x-r.p3.x;
+  float d_btrp3y = b.c.y-r.c.y-r.p3.y;
+  float d_btrp3 = pow(d_btrp3x,2) + pow(d_btrp3y,2);
+  float d_btrp4x = b.c.x-r.c.x-r.p4.x;
+  float d_btrp4y = b.c.y-r.c.y-r.p4.y;
+  float d_btrp4 = pow(d_btrp4x,2) + pow(d_btrp4y,2);
+
+  float d_rminx;
+  float d_rminy;
+  float d_r_p1_x;
+  float d_r_p1_y;
+  float d_r_m1_x;
+  float d_r_m1_y;
   
-  if (outer) {
-	float d_btrp1x = ball.c.x-ball.c.x-rect.p1.x;
-	float d_btrp1y = ball.c.y-ball.c.y-rect.p1.y;
-	float d_btrp1 = pow(d_btrp1x,2) + pow(d_btrp1y,2);
-	float d_btrp2x = ball.c.x-ball.c.x-rect.p2.x;
-	float d_btrp2y = ball.c.y-ball.c.y-rect.p2.y;
-	float d_btrp2 = pow(d_btrp2x,2) + pow(d_btrp2y,2);
-	float d_btrp3x = ball.c.x-ball.c.x-rect.p3.x;
-	float d_btrp3y = ball.c.y-ball.c.y-rect.p3.y;
-	float d_btrp3 = pow(d_btrp3x,2) + pow(d_btrp3y,2);
-	float d_btrp4x = ball.c.x-ball.c.x-rect.p4.x;
-	float d_btrp4y = ball.c.y-ball.c.y-rect.p4.y;
-	float d_btrp4 = pow(d_btrp4x,2) + pow(d_btrp4y,2);
-
-	if (d_btrp1 <= d_btrp2 &&
-		d_btrp1 <= d_btrp3 &&
-		d_btrp1 <= d_btrp4) {
-	  float d_rminx = rect.p1.x;
-	  float d_rminy = rect.p1.y;
-	  float d_r_p1_x = rect.p2.x;
-	  float d_r_p1_y = rect.p2.y;
-	  float d_r_m1_x = rect.p4.x;
-	  float d_r_m1_y = rect.p4.y;
-	} else if (d_btrp2 <= d_btrp3 &&
-			   d_btrp2 <= d_btrp4) {
-	  float d_rminx = rect.p2.x;
-	  float d_rminy = rect.p2.y;
-	  float d_r_p1_x = rect.p3.x;
-	  float d_r_p1_y = rect.p3.y;
-	  float d_r_m1_x = rect.p1.x;
-	  float d_r_m1_y = rect.p1.y;
-	} else if (d_btrp3 <= d_btrp4) {
-	  float d_rminx = rect.p3.x;
-	  float d_rminy = rect.p3.y;
-	  float d_r_p1_x = rect.p4.x;
-	  float d_r_p1_y = rect.p4.y;
-	  float d_r_m1_x = rect.p2.x;
-	  float d_r_m1_y = rect.p2.y;
-	} else {
-	  float d_rminx = rect.p4.x;
-	  float d_rminy = rect.p4.y;
-	  float d_r_p1_x = rect.p1.x;
-	  float d_r_p1_y = rect.p1.y;
-	  float d_r_m1_x = rect.p3.x;
-	  float d_r_m1_y = rect.p3.y;
-	}
-
 	
-    float border = 32;
-	
+  if (d_btrp1 <= d_btrp2 &&
+	  d_btrp1 <= d_btrp3 &&
+	  d_btrp1 <= d_btrp4) {
+	d_rminx = r.p1.x;
+	d_rminy = r.p1.y;
+	d_r_p1_x = r.p2.x;
+	d_r_p1_y = r.p2.y;
+	d_r_m1_x = r.p4.x;
+	d_r_m1_y = r.p4.y;
+  } else if (d_btrp2 <= d_btrp3 &&
+			 d_btrp2 <= d_btrp4) {
+	d_rminx = r.p2.x;
+	d_rminy = r.p2.y;
+	d_r_p1_x = r.p3.x;
+	d_r_p1_y = r.p3.y;
+	d_r_m1_x = r.p1.x;
+	d_r_m1_y = r.p1.y;
+  } else if (d_btrp3 <= d_btrp4) {
+	d_rminx = r.p3.x;
+	d_rminy = r.p3.y;
+	d_r_p1_x = r.p4.x;
+	d_r_p1_y = r.p4.y;
+	d_r_m1_x = r.p2.x;
+	d_r_m1_y = r.p2.y;
   } else {
-	/* if (rect.c.x - rect.x <= ball.c.x &&  ball.c.x <= rect.c.x + rect.x){ */
-	/*   if (rect.c.y - rect.y >= ball.c.y - ball.mag || rect.c.y + rect.dy <= ball.c.y + ball.mag) { */
-	/* 	mask = mask | Y; */
-	/*   } */
-	/* } */
-	
-	/* if (rect.c.y - rect.dy <= ball.c.y &&  ball.c.y <= rect.c.y + rect.dy){ */
-	/*   if (rect.c.x - rect.x >= ball.c.x - ball.mag || rect.c.x + rect.x <= ball.c.x + ball.mag) { */
-	/* 	mask = mask | X; */
-	/*   }  */
-	/* } */
+	d_rminx = r.p4.x;
+	d_rminy = r.p4.y;
+	d_r_p1_x = r.p1.x;
+	d_r_p1_y = r.p1.y;
+	d_r_m1_x = r.p3.x;
+	d_r_m1_y = r.p3.y;
   }
+
+  v2f d_rmin = {
+	.x = r.c.x + d_rminx,
+	.y = r.c.y + d_rminy,
+  };
+  v2f d_r_p1 = {
+	.x = r.c.x + d_r_p1_x,
+	.y = r.c.y + d_r_p1_y,
+  };
+  v2f d_r_m1 = {
+	.x = r.c.x + d_r_m1_x,
+	.y = r.c.y + d_r_m1_y,
+  };
   
-  return mask;
+  float c1 = ((d_rmin.x - d_r_m1.x))*(b.c.y - d_r_m1.y) - (d_rmin.y - d_r_m1.y)*(b.c.x - d_r_m1.x);
+  float c2 = ((d_r_p1.x - d_rmin.x))*(b.c.y - d_rmin.y) - (d_r_p1.y - d_rmin.y)*(b.c.x - d_rmin.x);
+
+  #ifdef DEBUG
+  draw_line(debug_display, b.c, d_rmin, BLUE);
+  draw_line(debug_display, b.c, d_r_p1, BLUE);
+  draw_line(debug_display, b.c, d_r_m1, BLUE);
+  #endif // DEBUG
+  
+  float d_bcrmin = v2f_dist_eukl(d_rmin, b.c);
+
+  if (o) {
+	if (c1 <= 0 && c2 <= 0) {
+	  if (d_bcrmin < b.mag) {
+        #ifdef DEBUG
+		draw_line(debug_display, b.c, d_rmin, GREEN);
+        #endif // DEBUG
+
+		return d_rmin;
+	  }
+
+      #ifdef DEBUG
+	  if (d_bcrmin >= b.mag) {
+		draw_line(debug_display, b.c, d_rmin, RED);
+	  }
+      #endif // DEBUG
+   
+	} else if (c1 <= 0) {
+	  #ifdef DEBUG
+	  v2f orth = find_orthogonal_visualized(debug_display, d_rmin, d_r_m1, b.c, p);
+	  #else
+	  v2f orth = find_orthogonal(d_rmin, d_r_m1, b.c, p);
+      #endif // DEBUG
+
+	  float d_bo = v2f_dist_eukl(b.c, orth);
+
+	  if (d_bo <= b.mag) return orth;
+    
+	} else if (c2 <= 0) {
+	  #ifdef DEBUG
+	  v2f orth = find_orthogonal_visualized(debug_display, d_rmin, d_r_p1, b.c, p);
+	  #else
+	  v2f orth = find_orthogonal(d_rmin, d_r_p1, b.c, p);
+	  #endif // DEBUG
+	  
+	  float d_bo = v2f_dist_eukl(b.c, orth);
+
+	  if (d_bo <= b.mag) return orth;
+	}
+  } else {
+	if (c1 > 0 && c2 > 0) {
+	  #ifdef DEBUG
+	  v2f orth1 = find_orthogonal_visualized(debug_display, d_rmin, d_r_m1, b.c, p);
+	  #else
+	  v2f orth1 = find_orthogonal(d_rmin, d_r_m1, b.c, p);
+      #endif // DEBUG
+
+	  float d_bo1 = v2f_dist_eukl(b.c, orth1);
+
+	  if (d_bo1 < b.mag) return orth1;
+	  
+	  #ifdef DEBUG
+	  v2f orth2 = find_orthogonal_visualized(debug_display, d_rmin, d_r_p1, b.c, p);
+	  #else
+	  v2f orth2 = find_orthogonal(d_rmin, d_r_p1, b.c, p);
+	  #endif // DEBUG
+	  
+	  float d_bo2 = v2f_dist_eukl(b.c, orth2);
+
+	  if (d_bo2 < b.mag) return orth2;
+	}
+  }
+
+  return (v2f){0};
 }
 
 int draw_rect(iDisplay display, Rect rect, Color color) {
@@ -324,14 +432,14 @@ int draw_rect(iDisplay display, Rect rect, Color color) {
   float rp4y = rect.c.y + rect.c.y;
   
   int xl =(int) floor(rp1x <= rp2x && rp1x <= rp3x  && rp1x <= rp4x ? rp1x : ( rp2x <= rp3x && rp2x <= rp4x ? rp2x : ( rp3x <= rp4x ? rp3x : rp4x)));
-  int xr =(int) floor(rp1x >= rp2x && rp1x >= rp3x  && rp1x >= rp4x ? rp1x : ( rp2x >= rp3x && rp2x >= rp4y ? rp2x : ( rp3x >= rp4x ? rp3x : rp4x)));
-  int yl =(int) floor(rp1y <= rp2y && rp1y <= rp3y  && rp1y <= rp4y ? rp1y : ( rp2y <= rp3y && rp2y <= rp4x ? rp2y : ( rp3y <= rp4y ? rp3y : rp4y)));
+  int xr =(int) floor(rp1x >= rp2x && rp1x >= rp3x  && rp1x >= rp4x ? rp1x : ( rp2x >= rp3x && rp2x >= rp4x ? rp2x : ( rp3x >= rp4x ? rp3x : rp4x)));
+  int yl =(int) floor(rp1y <= rp2y && rp1y <= rp3y  && rp1y <= rp4y ? rp1y : ( rp2y <= rp3y && rp2y <= rp4y ? rp2y : ( rp3y <= rp4y ? rp3y : rp4y)));
   int yr =(int) floor(rp1y >= rp2y && rp1y >= rp3y  && rp1y >= rp4y ? rp1y : ( rp2y >= rp3y && rp2y >= rp4y ? rp2y : ( rp3y >= rp4y ? rp3y : rp4y)));
 
-  xl = 0<=xl ? xl : 0;
-  xr = xr < display.w ? xr : display.w;
-  yl = 0<=yl ? yl : 0;
-  yr = yr < display.h ? yr : display.h;
+  xl = xl < display.w ? (0<=xl ? xl : 0) : display.w;
+  xr = 0 <= xr ? (xr < display.w ? xr : display.w) : 0;
+  yl = yl < display.h ? (0<=yl ? yl : 0) : display.h;
+  yr = 0 <= yr ? (yr < display.h ? yr : display.h) : 0;
 
   int dp1p2x = (int) floor(rp2x - rp1x);
   int dp1p2y = (int) floor(rp2y - rp1y);
@@ -389,6 +497,7 @@ int draw_rect(iDisplay display, Rect rect, Color color) {
 }
 
 // NOTE: b would be more accurate by using a norm. Maybe later
+// TODO: if xl and xr are far left in the negative, clipping result into a shift -> xr <= xl
 int draw_rect_filled(iDisplay display, Rect rect, Color color) {
   float rp1x = rect.c.x + rect.p1.x;
   float rp1y = rect.c.y + rect.p1.y;
@@ -400,14 +509,14 @@ int draw_rect_filled(iDisplay display, Rect rect, Color color) {
   float rp4y = rect.c.y + rect.p4.y;
   
   int xl =(int) floor(rp1x <= rp2x && rp1x <= rp3x  && rp1x <= rp4x ? rp1x : ( rp2x <= rp3x && rp2x <= rp4x ? rp2x : ( rp3x <= rp4x ? rp3x : rp4x)));
-  int xr =(int) floor(rp1x >= rp2x && rp1x >= rp3x  && rp1x >= rp4x ? rp1x : ( rp2x >= rp3x && rp2x >= rp4y ? rp2x : ( rp3x >= rp4x ? rp3x : rp4x)));
-  int yl =(int) floor(rp1y <= rp2y && rp1y <= rp3y  && rp1y <= rp4y ? rp1y : ( rp2y <= rp3y && rp2y <= rp4x ? rp2y : ( rp3y <= rp4y ? rp3y : rp4y)));
+  int xr =(int) floor(rp1x >= rp2x && rp1x >= rp3x  && rp1x >= rp4x ? rp1x : ( rp2x >= rp3x && rp2x >= rp4x ? rp2x : ( rp3x >= rp4x ? rp3x : rp4x)));
+  int yl =(int) floor(rp1y <= rp2y && rp1y <= rp3y  && rp1y <= rp4y ? rp1y : ( rp2y <= rp3y && rp2y <= rp4y ? rp2y : ( rp3y <= rp4y ? rp3y : rp4y)));
   int yr =(int) floor(rp1y >= rp2y && rp1y >= rp3y  && rp1y >= rp4y ? rp1y : ( rp2y >= rp3y && rp2y >= rp4y ? rp2y : ( rp3y >= rp4y ? rp3y : rp4y)));
 
-  xl = 0<=xl ? xl : 0;
-  xr = xr < display.w ? xr : display.w;
-  yl = 0<=yl ? yl : 0;
-  yr = yr < display.h ? yr : display.h;
+  xl = xl < display.w ? (0<=xl ? xl : 0) : display.w;
+  xr = 0 <= xr ? (xr < display.w ? xr : display.w) : 0;
+  yl = yl < display.h ? (0<=yl ? yl : 0) : display.h;
+  yr = 0 <= yr ? (yr < display.h ? yr : display.h) : 0;
 
   int dp1p2x = (int) floor(rp2x - rp1x);
   int dp1p2y = (int) floor(rp2y - rp1y);
@@ -642,6 +751,74 @@ int draw_tria_rainbow(iDisplay display, Tria t) {
   }
 
   return 0;
+}
+
+
+// NOTE: approximates the point on line p11 -> p12 that represents
+//       an nearly orthogonal line to p21. sa represents the amount of
+//       grid steps including the starting points.
+v2f find_orthogonal(v2f p11, v2f p12, v2f p21, int sa) {
+  float d_p11p12x = p12.x - p11.x;
+  float d_p11p12y = p12.y - p11.y;
+  v2f pc = {.x=p11.x + 1/(float)sa*d_p11p12x, .y=p11.y + 1/(float)sa*d_p11p12y};
+ 	
+  for (int i=1; i<=sa; i++) {
+	v2f dpcb = {.x=pc.x-p21.x,
+				.y=pc.y-p21.y};
+	float d1 = sqrt(pow(dpcb.x,2) + pow(dpcb.y,2));
+	
+	v2f dp1p2 = {.x = p11.x - p12.x,
+				 .y = p11.y - p12.y};
+	float d2 = sqrt(pow(dp1p2.x,2) + pow(dp1p2.y,2));
+	
+	// NOTE: normalized dot product of crossing lines 
+	float dot = (dpcb.x/d1)*(dp1p2.x/d2) + (dpcb.y/d1)*(dp1p2.y/d2);
+
+	float m = d2 / d1;
+	if (-m/(2.*sa) <= dot && dot < m/(2.*sa)) {
+	  return pc;
+	}
+ 	 
+	pc.x += d_p11p12x/(float)sa;
+	pc.y += d_p11p12y/(float)sa;
+  }
+
+  return (v2f) {0};
+}
+
+
+v2f find_orthogonal_visualized(iDisplay display, v2f p11, v2f p12, v2f p21, int sa) {
+  draw_line(display, p11, p21, BLUE);
+  draw_line(display, p12, p21, BLUE);
+  
+  float d_p11p12x = p12.x - p11.x;
+  float d_p11p12y = p12.y - p11.y;
+  v2f pc = {.x=p11.x + 1/(float)sa*d_p11p12x, .y=p11.y + 1/(float)sa*d_p11p12y};
+ 	
+  for (int i=1; i<=sa; i++) {
+	v2f dpcb = {.x=pc.x-p21.x,
+				.y=pc.y-p21.y};
+	float d1 = sqrt(pow(dpcb.x,2) + pow(dpcb.y,2));
+	
+	v2f dp1p2 = {.x = p11.x-p12.x,
+				 .y = p11.y - p12.y};
+	float d2 = sqrt(pow(dp1p2.x,2) + pow(dp1p2.y,2));
+	
+	float dot = (dpcb.x/d1)*(dp1p2.x/d2) + (dpcb.y/d1)*(dp1p2.y/d2);
+
+	float m = d2 / d1;
+	if (-m/(2.*sa) <= dot && dot < m/(2.*sa)) {
+	  draw_line(display, p21, pc, GREEN);
+	  return pc;
+	} else {
+	  draw_line(display, p21, pc, RED);
+	}
+ 	 
+	pc.x += d_p11p12x/(float)sa;
+	pc.y += d_p11p12y/(float)sa;
+  }
+
+  return (v2f) {0};
 }
 
 #endif // SHAPES_IMPL
