@@ -27,6 +27,42 @@ Rect rect_l, rect_r, rect_c, screen_border;
 
 bool keymap[256] = {0};
 
+int find_orthogonal(iDisplay display, v2f p11, v2f p12, v2f p21, int sa) {
+  draw_line(display, p11, p21, BLUE);
+  draw_line(display, p12, p21, BLUE);
+  
+  float d_p11p12x = p12.x - p11.x;
+  float d_p11p12y = p12.y - p11.y;
+  v2f pc = {.x=p11.x + 1/(float)sa*d_p11p12x, .y=p11.y + 1/(float)sa*d_p11p12y};
+ 	
+  for (int i=1; i<=sa; i++) {
+	v2f dpcb = {.x=pc.x-p21.x,
+				.y=pc.y-p21.y};
+	float d1 = sqrt(pow(dpcb.x,2) + pow(dpcb.y,2));
+	
+	v2f dp1p2 = {.x = p11.x-p12.x,
+				 .y = p11.y - p12.y};
+	float d2 = sqrt(pow(dp1p2.x,2) + pow(dp1p2.y,2));
+	
+	float dot = (dpcb.x/d1)*(dp1p2.x/d2) + (dpcb.y/d1)*(dp1p2.y/d2);
+
+	if (dot < 1./(2*sa) && dot >= -1./(2*sa)) {
+	  draw_line(display, p21, pc, GREEN);
+	} else {
+	  draw_line(display, p21, pc, RED);
+	}
+ 	 
+
+	
+	pc.x += d_p11p12x/(float)sa;
+	pc.y += d_p11p12y/(float)sa;
+  }
+
+  return 0;
+}
+
+
+
 
 int update_move() {
   if (keymap['w']) move.y -= 2.;
@@ -38,7 +74,7 @@ int update_move() {
 }
 
 Ball update_position(Ball ball, v2f move) {
-  int dy = ball.c.y + gravitation.y + move.y;
+  int dy = ball.c.y + move.y; //gravitation.y + move.y;
   int dx = ball.c.x + move.x;
 
   Ball vBall = {
@@ -46,7 +82,7 @@ Ball update_position(Ball ball, v2f move) {
 	.mag = ball.mag,
   };
 
-  BLOCKED_DIR dir = rect_collision(screen_border, vBall, false);
+  BLOCKED_DIR dir = rect_ball_collision(screen_border, vBall, false);
 
   if (dir==NONE) {
 	ball.c.x = dx;
@@ -74,7 +110,7 @@ int init_scene(iDisplay display) {
   rect_l = rect_create((v2f) {.x=0., .y=HEIGHT-1.},
 					   100., 100.,
 					   0.);
-  rect_r = rect_create((v2f) {.x=WIDTH-1., .y=HEIGHT-1.},
+  rect_r = rect_create((v2f) {.x=WIDTH/2., .y=HEIGHT/2.},
 					   100., 100.,
 					   0.);
 
@@ -114,29 +150,89 @@ int update_scene(iDisplay display) {
   draw_ball_filled(display, ball_l, BLUE);
   draw_ball_filled(display, ball_r, GREEN);
 
-  if (rect_collision(rect_l, ball, true)) {
+  if (rect_ball_collision(rect_l, ball, true)) {
 	draw_rect_filled(display, rect_l, RED);
   } else {
 	draw_rect_filled(display, rect_l, WHITE);
   }
-  if (rect_collision(rect_r, ball, true)) draw_rect_filled(display, rect_r, RED);
+  if (rect_ball_collision(rect_r, ball, true)) draw_rect_filled(display, rect_r, RED);
   else draw_rect_filled(display, rect_r, WHITE);
   
   move.x = 0;
   move.y = 0;
 
   
-  draw_rect_filled(display, rect_c, RED);
-  rect_c.a += .01;
+  /* draw_rect_filled(display, rect_c, RED); */
+  /* rect_c = rect_rotate(rect_c, 0.01*global_time); */
 
-  draw_tria_rainbow(display, tri_a);
-  tri_a = tria_rotate(tri_a, 0.01*global_time);
-  draw_tria_rainbow(display, tri_b);
-  tri_b = tria_rotate(tri_b, 0.01*global_time);
-  draw_tria_rainbow(display, tri_c);
-  tri_c = tria_rotate(tri_c, 0.01*global_time);
-  draw_tria_rainbow(display, tri_d);
-  tri_d = tria_rotate(tri_d, 0.01*global_time);
+  /* draw_tria_rainbow(display, tri_a); */
+  /* tri_a = tria_rotate(tri_a, 0.01*global_time); */
+  /* draw_tria_rainbow(display, tri_b); */
+  /* tri_b = tria_rotate(tri_b, 0.01*global_time); */
+  /* draw_tria_rainbow(display, tri_c); */
+  /* tri_c = tria_rotate(tri_c, 0.01*global_time); */
+  /* draw_tria_rainbow(display, tri_d); */
+  /* tri_d = tria_rotate(tri_d, 0.01*global_time); */
+
+
+  float d_btrp1x = ball.c.x-rect_r.c.x-rect_r.p1.x;
+  float d_btrp1y = ball.c.y-rect_r.c.y-rect_r.p1.y;
+  float d_btrp1 = pow(d_btrp1x,2) + pow(d_btrp1y,2);
+  float d_btrp2x = ball.c.x-rect_r.c.x-rect_r.p2.x;
+  float d_btrp2y = ball.c.y-rect_r.c.y-rect_r.p2.y;
+  float d_btrp2 = pow(d_btrp2x,2) + pow(d_btrp2y,2);
+  float d_btrp3x = ball.c.x-rect_r.c.x-rect_r.p3.x;
+  float d_btrp3y = ball.c.y-rect_r.c.y-rect_r.p3.y;
+  float d_btrp3 = pow(d_btrp3x,2) + pow(d_btrp3y,2);
+  float d_btrp4x = ball.c.x-rect_r.c.x-rect_r.p4.x;
+  float d_btrp4y = ball.c.y-rect_r.c.y-rect_r.p4.y;
+  float d_btrp4 = pow(d_btrp4x,2) + pow(d_btrp4y,2);
+
+  float d_rminx;
+  float d_rminy;
+  float d_r_p1_x;
+  float d_r_p1_y;
+  float d_r_m1_x;
+  float d_r_m1_y;
+  
+	
+  if (d_btrp1 <= d_btrp2 &&
+	  d_btrp1 <= d_btrp3 &&
+	  d_btrp1 <= d_btrp4) {
+	d_rminx = rect_r.p1.x;
+	d_rminy = rect_r.p1.y;
+	d_r_p1_x = rect_r.p2.x;
+	d_r_p1_y = rect_r.p2.y;
+	d_r_m1_x = rect_r.p4.x;
+	d_r_m1_y = rect_r.p4.y;
+  } else if (d_btrp2 <= d_btrp3 &&
+			 d_btrp2 <= d_btrp4) {
+	d_rminx = rect_r.p2.x;
+	d_rminy = rect_r.p2.y;
+	d_r_p1_x = rect_r.p3.x;
+	d_r_p1_y = rect_r.p3.y;
+	d_r_m1_x = rect_r.p1.x;
+	d_r_m1_y = rect_r.p1.y;
+  } else if (d_btrp3 <= d_btrp4) {
+	d_rminx = rect_r.p3.x;
+	d_rminy = rect_r.p3.y;
+	d_r_p1_x = rect_r.p4.x;
+	d_r_p1_y = rect_r.p4.y;
+	d_r_m1_x = rect_r.p2.x;
+	d_r_m1_y = rect_r.p2.y;
+  } else {
+	d_rminx = rect_r.p4.x;
+	d_rminy = rect_r.p4.y;
+	d_r_p1_x = rect_r.p1.x;
+	d_r_p1_y = rect_r.p1.y;
+	d_r_m1_x = rect_r.p3.x;
+	d_r_m1_y = rect_r.p3.y;
+  }
+
+  v2f p = {.x=rect_r.c.x + d_rminx, .y=rect_r.c.y + d_rminy};
+  v2f p1 = {.x=rect_r.c.x + d_r_p1_x, .y=rect_r.c.y + d_r_p1_y};
+  find_orthogonal(display, p, p1, ball.c, 16);
+  
 
 
   return 0;
@@ -208,7 +304,6 @@ int main(void)
 
 	double target_fps = 60.0f;
 	double current_fps = 0.f;
-	
 	int cycle_count = 5;
 	int cycle = cycle_count;
 	static struct timespec frame_t;

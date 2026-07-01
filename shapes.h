@@ -19,10 +19,8 @@ typedef struct Color Color;
 
 typedef struct iDisplay iDisplay;
 
-
+// TODO: lin alg lib
 typedef struct v2i v2i;
-
-
 typedef struct v2f v2f;
 
 typedef enum BLOCKED_DIR {
@@ -35,16 +33,21 @@ typedef enum BLOCKED_DIR {
   Y = 64,
 } BLOCKED_DIR;
 
+int draw_line(iDisplay display, v2f p1, v2f p2, Color color);
+
 typedef struct Ball Ball;
 Ball ball_create(v2f c, float mag);
 
 int draw_ball(iDisplay display, Ball ball, float bt, Color color);
 int draw_ball_filled(iDisplay display, Ball ball, Color color);
 
+
+// TODO: rename Rect to Quadliteral
 typedef struct Rect Rect;
+Rect rect_quad_create(v2f c, v2f p1, v2f p2, v2f p3, v2f p4);
 Rect rect_create(v2f center, float dx, float dy, float a);
 Rect rect_rotate(Rect r, float a);
-BLOCKED_DIR rect_collision(Rect rect, Ball ball, bool outer);
+BLOCKED_DIR rect_ball_collision(Rect rect, Ball ball, bool outer);
 
 int draw_rect(iDisplay display, Rect rect, Color color);
 int draw_rect_filled(iDisplay display, Rect rect, Color color);
@@ -53,7 +56,7 @@ int draw_rect_filled(iDisplay display, Rect rect, Color color);
 typedef struct Tria Tria;
 Tria tri_create(v2f center, v2f p1, v2f p2, v2f p3);
 Tria tri_create_equ(v2f center, float s, float a);
-Tria rotate_tri(Tria t, float a);
+Tria tri_rotate(Tria t, float a);
 
 int draw_tria(iDisplay display, Tria t, Color color);
 int draw_tria_rainbow(iDisplay display, Tria t);
@@ -90,6 +93,27 @@ typedef struct v2f {
   float x,y;
 } v2f;
 
+
+
+int draw_line(iDisplay display, v2f p1, v2f p2, Color color){
+  float d_p1p2x = p1.x - p2.x;
+  float d_p1p2y = p1.y - p2.y;
+  float d_p1p2 = sqrt(pow(d_p1p2x,2) + pow(d_p1p2y,2));
+  d_p1p2 = d_p1p2==0 ? 1 : d_p1p2;
+
+  display.pixels[(int) floor(p1.y)*display.w + (int) floor(p1.x)] = CToUi32(RED);  
+  display.pixels[(int) floor(p2.y)*display.w + (int) floor(p2.x)] = CToUi32(RED);
+  
+  for (int i = 0; i <= (int) floor(d_p1p2); i++) {
+	int x = (int) floor(p2.x + i/d_p1p2 * d_p1p2x);
+	int y = (int) floor(p2.y + i/d_p1p2 * d_p1p2y);
+
+	display.pixels[y*display.w + x] = CToUi32(color);
+  }
+
+  
+  return 0;
+}
 
 
 typedef struct Ball {
@@ -153,68 +177,212 @@ int draw_ball_filled(iDisplay display, Ball ball, Color color) {
 
 typedef struct Rect {
   v2f c;
-  float a;
-  int dx;
-  int dy;
+  v2f p1,p2,p3,p4;
 } Rect;
 
 
 Rect rect_create(v2f c, float dx, float dy, float a) {
+  v2f p1 = {
+	(-dx)* cos(a) - (-dy) * sin(a),
+	(-dx)* sin(a) + (-dy) * cos(a),
+  };
+  v2f p2 = {
+	(dx)* cos(a) - (-dy) * sin(a),
+	(dx)* sin(a) + (-dy) * cos(a),
+  };
+  v2f p3 = {
+	(dx)* cos(a) - (dy) * sin(a),
+	(dx)* sin(a) + (dy) * cos(a),
+  };
+  v2f p4 = {
+	(-dx)* cos(a) - (dy) * sin(a),
+	(-dx)* sin(a) + (dy) * cos(a),
+  };
+
   return (Rect) { 
 	.c = c,
-	.a = a,
-	.dx = dx,
-	.dy = dy};
+	.p1 = p1,
+	.p2 = p2,
+	.p3 = p3,
+	.p4 = p4}; 
+}
+
+Rect rect_quad_create(v2f c, v2f p1, v2f p2, v2f p3, v2f p4) {
+  return (Rect) { 
+	.c = c,
+	.p1 = p1,
+	.p2 = p2,
+	.p3 = p3,
+	.p4 = p4};
+}
+
+Rect rect_rotate(Rect r, float a) {
+    v2f p1 = {
+	(r.p1.x)* cos(a) - (r.p1.y) * sin(a),
+	(r.p1.x)* sin(a) + (r.p1.y) * cos(a),
+  };
+  v2f p2 = {
+	(r.p2.x)* cos(a) - (r.p2.y) * sin(a),
+	(r.p2.x)* sin(a) + (r.p2.y) * cos(a),
+  };
+  v2f p3 = {
+	(r.p3.x)* cos(a) - (r.p3.y) * sin(a),
+	(r.p3.x)* sin(a) + (r.p3.y) * cos(a),
+  };
+  v2f p4 = {
+	(r.p4.x)* cos(a) - (r.p4.y) * sin(a),
+	(r.p4.x)* sin(a) + (r.p4.y) * cos(a),
+  };
+
+  return (Rect) { 
+	.c = r.c,
+	.p1 = p1,
+	.p2 = p2,
+	.p3 = p3,
+	.p4 = p4}; 
 }
 
 // Collision at the border
-BLOCKED_DIR rect_collision(Rect rect, Ball ball, bool outer) {
+BLOCKED_DIR rect_ball_collision(Rect rect, Ball ball, bool outer) {
   BLOCKED_DIR mask = NONE;
   
   if (outer) {
-	if (rect.c.x - rect.dx <= ball.c.x &&  ball.c.x <= rect.c.x + rect.dx){
-	  if (rect.c.y - rect.dy <= ball.c.y + ball.mag && rect.c.y + rect.dy >= ball.c.y - ball.mag) {
-		mask = mask | Y;
-	  }
+	float d_btrp1x = ball.c.x-ball.c.x-rect.p1.x;
+	float d_btrp1y = ball.c.y-ball.c.y-rect.p1.y;
+	float d_btrp1 = pow(d_btrp1x,2) + pow(d_btrp1y,2);
+	float d_btrp2x = ball.c.x-ball.c.x-rect.p2.x;
+	float d_btrp2y = ball.c.y-ball.c.y-rect.p2.y;
+	float d_btrp2 = pow(d_btrp2x,2) + pow(d_btrp2y,2);
+	float d_btrp3x = ball.c.x-ball.c.x-rect.p3.x;
+	float d_btrp3y = ball.c.y-ball.c.y-rect.p3.y;
+	float d_btrp3 = pow(d_btrp3x,2) + pow(d_btrp3y,2);
+	float d_btrp4x = ball.c.x-ball.c.x-rect.p4.x;
+	float d_btrp4y = ball.c.y-ball.c.y-rect.p4.y;
+	float d_btrp4 = pow(d_btrp4x,2) + pow(d_btrp4y,2);
+
+	if (d_btrp1 <= d_btrp2 &&
+		d_btrp1 <= d_btrp3 &&
+		d_btrp1 <= d_btrp4) {
+	  float d_rminx = rect.p1.x;
+	  float d_rminy = rect.p1.y;
+	  float d_r_p1_x = rect.p2.x;
+	  float d_r_p1_y = rect.p2.y;
+	  float d_r_m1_x = rect.p4.x;
+	  float d_r_m1_y = rect.p4.y;
+	} else if (d_btrp2 <= d_btrp3 &&
+			   d_btrp2 <= d_btrp4) {
+	  float d_rminx = rect.p2.x;
+	  float d_rminy = rect.p2.y;
+	  float d_r_p1_x = rect.p3.x;
+	  float d_r_p1_y = rect.p3.y;
+	  float d_r_m1_x = rect.p1.x;
+	  float d_r_m1_y = rect.p1.y;
+	} else if (d_btrp3 <= d_btrp4) {
+	  float d_rminx = rect.p3.x;
+	  float d_rminy = rect.p3.y;
+	  float d_r_p1_x = rect.p4.x;
+	  float d_r_p1_y = rect.p4.y;
+	  float d_r_m1_x = rect.p2.x;
+	  float d_r_m1_y = rect.p2.y;
+	} else {
+	  float d_rminx = rect.p4.x;
+	  float d_rminy = rect.p4.y;
+	  float d_r_p1_x = rect.p1.x;
+	  float d_r_p1_y = rect.p1.y;
+	  float d_r_m1_x = rect.p3.x;
+	  float d_r_m1_y = rect.p3.y;
 	}
+
 	
-	if (rect.c.y - rect.dy <= ball.c.y &&  ball.c.y <= rect.c.y + rect.dy){
-	  if (rect.c.x - rect.dx <= ball.c.x + ball.mag && rect.c.x + rect.dx >= ball.c.x - ball.mag) {
-		mask = mask | X;
-	  }
-	}
+    float border = 32;
+	
   } else {
-	if (rect.c.x - rect.dx <= ball.c.x &&  ball.c.x <= rect.c.x + rect.dx){
-	  if (rect.c.y - rect.dy >= ball.c.y - ball.mag || rect.c.y + rect.dy <= ball.c.y + ball.mag) {
-		mask = mask | Y;
-	  }
-	}
+	/* if (rect.c.x - rect.x <= ball.c.x &&  ball.c.x <= rect.c.x + rect.x){ */
+	/*   if (rect.c.y - rect.y >= ball.c.y - ball.mag || rect.c.y + rect.dy <= ball.c.y + ball.mag) { */
+	/* 	mask = mask | Y; */
+	/*   } */
+	/* } */
 	
-	if (rect.c.y - rect.dy <= ball.c.y &&  ball.c.y <= rect.c.y + rect.dy){
-	  if (rect.c.x - rect.dx >= ball.c.x - ball.mag || rect.c.x + rect.dx <= ball.c.x + ball.mag) {
-		mask = mask | X;
-	  } 
-	}
+	/* if (rect.c.y - rect.dy <= ball.c.y &&  ball.c.y <= rect.c.y + rect.dy){ */
+	/*   if (rect.c.x - rect.x >= ball.c.x - ball.mag || rect.c.x + rect.x <= ball.c.x + ball.mag) { */
+	/* 	mask = mask | X; */
+	/*   }  */
+	/* } */
   }
   
   return mask;
 }
 
 int draw_rect(iDisplay display, Rect rect, Color color) {
-  int lx = rect.c.x - rect.dx;
-  int rx = rect.c.x + rect.dx;
-  int ly = rect.c.y - rect.dy;
-  int ry = rect.c.y + rect.dy;
+  float rp1x = rect.c.x + rect.c.x;
+  float rp1y = rect.c.y + rect.c.y;
+  float rp2x = rect.c.x + rect.c.x;
+  float rp2y = rect.c.y + rect.c.y;
+  float rp3x = rect.c.x + rect.c.x;
+  float rp3y = rect.c.y + rect.c.y;
+  float rp4x = rect.c.x + rect.c.x;
+  float rp4y = rect.c.y + rect.c.y;
+  
+  int xl =(int) floor(rp1x <= rp2x && rp1x <= rp3x  && rp1x <= rp4x ? rp1x : ( rp2x <= rp3x && rp2x <= rp4x ? rp2x : ( rp3x <= rp4x ? rp3x : rp4x)));
+  int xr =(int) floor(rp1x >= rp2x && rp1x >= rp3x  && rp1x >= rp4x ? rp1x : ( rp2x >= rp3x && rp2x >= rp4y ? rp2x : ( rp3x >= rp4x ? rp3x : rp4x)));
+  int yl =(int) floor(rp1y <= rp2y && rp1y <= rp3y  && rp1y <= rp4y ? rp1y : ( rp2y <= rp3y && rp2y <= rp4x ? rp2y : ( rp3y <= rp4y ? rp3y : rp4y)));
+  int yr =(int) floor(rp1y >= rp2y && rp1y >= rp3y  && rp1y >= rp4y ? rp1y : ( rp2y >= rp3y && rp2y >= rp4y ? rp2y : ( rp3y >= rp4y ? rp3y : rp4y)));
 
-  lx = lx < 0 ? 0 : lx;
-  rx = rx >= display.w ? display.w - 1 : rx;
-  ly = ly < 0 ? 0 : ly;
-  ry = ry >= display.h ? display.h - 1 : ry;
+  xl = 0<=xl ? xl : 0;
+  xr = xr < display.w ? xr : display.w;
+  yl = 0<=yl ? yl : 0;
+  yr = yr < display.h ? yr : display.h;
 
-  for (int i = lx; i<=rx; i++) {
-	for (int j = ly; j<=ry; j++) {
-	  display.pixels[j*display.w + i] = CToUi32(color);
+  int dp1p2x = (int) floor(rp2x - rp1x);
+  int dp1p2y = (int) floor(rp2y - rp1y);
+  int dp2p3x = (int) floor(rp3x - rp2x);
+  int dp2p3y = (int) floor(rp3y - rp2y);
+  int dp3p4x = (int) floor(rp4x - rp3x);
+  int dp3p4y = (int) floor(rp4y - rp3y);
+  int dp4p1x = (int) floor(rp1x - rp4x);
+  int dp4p1y = (int) floor(rp1y - rp4y);
+
+  int srp1x = (int) floor(dp1p2y * rp1x);
+  int srp1y = (int) floor(dp1p2x * rp1y);
+  int srp2x = (int) floor(dp2p3y * rp2x);
+  int srp2y = (int) floor(dp2p3x * rp2y);
+  int srp3x = (int) floor(dp3p4y * rp3x);
+  int srp3y = (int) floor(dp3p4x * rp3y);
+  int srp4x = (int) floor(dp4p1y * rp4x);
+  int srp4y = (int) floor(dp4p1x * rp4y);
+
+  int C1 = (int) floor(srp1x - srp1y);
+  int C2 = (int) floor(srp2x - srp2y);
+  int C3 = (int) floor(srp3x - srp3y);
+  int C4 = (int) floor(srp4x - srp4y);
+
+  int ssrp1 = yl * dp1p2x - xl * dp1p2y + C1;
+  int ssrp2 = yl * dp2p3x - xl * dp2p3y + C2;
+  int ssrp3 = yl * dp3p4x - xl * dp3p4y + C3;
+  int ssrp4 = yl * dp4p1x - xl * dp4p1y + C4;
+
+  for (int j = yl; j<yr; j++) {
+  	int i_ssrp1 = ssrp1;
+	int i_ssrp2 = ssrp2;
+	int i_ssrp3 = ssrp3;
+	int i_ssrp4 = ssrp4;
+	
+	for (int i = xl; i<xr; i++) {
+	  if (i_ssrp1 == 0 &&
+		  i_ssrp2 == 0 &&
+		  i_ssrp3 == 0 &&
+		  i_ssrp4 == 0) {
+		  display.pixels[j*display.w + i] = CToUi32(color);
+	  }
+	  i_ssrp1 -= dp1p2y;
+	  i_ssrp2 -= dp2p3y;
+	  i_ssrp3 -= dp3p4y;
+	  i_ssrp4 -= dp4p1y;
 	}
+	ssrp1 += dp1p2x;
+	ssrp2 += dp2p3x;
+	ssrp3 += dp3p4x;
+	ssrp4 += dp4p1x;
   }
 
   return 0;
@@ -222,42 +390,75 @@ int draw_rect(iDisplay display, Rect rect, Color color) {
 
 // NOTE: b would be more accurate by using a norm. Maybe later
 int draw_rect_filled(iDisplay display, Rect rect, Color color) {
-  float rx = (cos(-rect.a) - sin(-rect.a)) * .5;
-  float ry = (sin(-rect.a) + cos(-rect.a)) * .5;
-
-  float c = cos(-rect.a);
-  float s = sin(-rect.a);
-
-  int b = (int) floor(rect.dx <= rect.dy ? rect.dy * 1.5 : rect.dx * 1.5);
-
-  float t_i = c * (-b) - s*(-b) + rx;
-  float t_j = s * (-b) + c*(-b) + ry;
-	
+  float rp1x = rect.c.x + rect.p1.x;
+  float rp1y = rect.c.y + rect.p1.y;
+  float rp2x = rect.c.x + rect.p2.x;
+  float rp2y = rect.c.y + rect.p2.y;
+  float rp3x = rect.c.x + rect.p3.x;
+  float rp3y = rect.c.y + rect.p3.y;
+  float rp4x = rect.c.x + rect.p4.x;
+  float rp4y = rect.c.y + rect.p4.y;
   
-  for (int i = -b; i<b; i++) {
-	float _t_i = t_i;
-	float _t_j = t_j;
-	
-	for (int j = -b; j<b; j++) {
-	  //int t_i = (int) floor(_t_i - s * j);
-	  //int t_j = (int) floor(_t_j + c * j);
+  int xl =(int) floor(rp1x <= rp2x && rp1x <= rp3x  && rp1x <= rp4x ? rp1x : ( rp2x <= rp3x && rp2x <= rp4x ? rp2x : ( rp3x <= rp4x ? rp3x : rp4x)));
+  int xr =(int) floor(rp1x >= rp2x && rp1x >= rp3x  && rp1x >= rp4x ? rp1x : ( rp2x >= rp3x && rp2x >= rp4y ? rp2x : ( rp3x >= rp4x ? rp3x : rp4x)));
+  int yl =(int) floor(rp1y <= rp2y && rp1y <= rp3y  && rp1y <= rp4y ? rp1y : ( rp2y <= rp3y && rp2y <= rp4x ? rp2y : ( rp3y <= rp4y ? rp3y : rp4y)));
+  int yr =(int) floor(rp1y >= rp2y && rp1y >= rp3y  && rp1y >= rp4y ? rp1y : ( rp2y >= rp3y && rp2y >= rp4y ? rp2y : ( rp3y >= rp4y ? rp3y : rp4y)));
 
-	  if (-rect.dx <= _t_i && _t_i < rect.dx &&
-		  -rect.dy <= _t_j && _t_j < rect.dy) {
-		int di = i + (int) floor(rect.c.x);
-		int dj = j + (int) floor(rect.c.y);
-	  
-		if (0<=di && di<display.w && 0<=dj && dj<display.h) {
-		  display.pixels[dj*display.w + di] = CToUi32(color);
-		}
+  xl = 0<=xl ? xl : 0;
+  xr = xr < display.w ? xr : display.w;
+  yl = 0<=yl ? yl : 0;
+  yr = yr < display.h ? yr : display.h;
+
+  int dp1p2x = (int) floor(rp2x - rp1x);
+  int dp1p2y = (int) floor(rp2y - rp1y);
+  int dp2p3x = (int) floor(rp3x - rp2x);
+  int dp2p3y = (int) floor(rp3y - rp2y);
+  int dp3p4x = (int) floor(rp4x - rp3x);
+  int dp3p4y = (int) floor(rp4y - rp3y);
+  int dp4p1x = (int) floor(rp1x - rp4x);
+  int dp4p1y = (int) floor(rp1y - rp4y);
+
+  int srp1x = (int) floor(dp1p2y * rp1x);
+  int srp1y = (int) floor(dp1p2x * rp1y);
+  int srp2x = (int) floor(dp2p3y * rp2x);
+  int srp2y = (int) floor(dp2p3x * rp2y);
+  int srp3x = (int) floor(dp3p4y * rp3x);
+  int srp3y = (int) floor(dp3p4x * rp3y);
+  int srp4x = (int) floor(dp4p1y * rp4x);
+  int srp4y = (int) floor(dp4p1x * rp4y);
+
+  int C1 = (int) floor(srp1x - srp1y);
+  int C2 = (int) floor(srp2x - srp2y);
+  int C3 = (int) floor(srp3x - srp3y);
+  int C4 = (int) floor(srp4x - srp4y);
+
+  int ssrp1 = yl * dp1p2x - xl * dp1p2y + C1;
+  int ssrp2 = yl * dp2p3x - xl * dp2p3y + C2;
+  int ssrp3 = yl * dp3p4x - xl * dp3p4y + C3;
+  int ssrp4 = yl * dp4p1x - xl * dp4p1y + C4;
+
+  for (int j = yl; j<yr; j++) {
+  	int i_ssrp1 = ssrp1;
+	int i_ssrp2 = ssrp2;
+	int i_ssrp3 = ssrp3;
+	int i_ssrp4 = ssrp4;
+	
+	for (int i = xl; i<xr; i++) {
+	  if (i_ssrp1 > 0 &&
+		  i_ssrp2 > 0 &&
+		  i_ssrp3 > 0 &&
+		  i_ssrp4 > 0) {
+		  display.pixels[j*display.w + i] = CToUi32(color);
 	  }
-
-	  _t_i += c;
-	  _t_j += s;
+	  i_ssrp1 -= dp1p2y;
+	  i_ssrp2 -= dp2p3y;
+	  i_ssrp3 -= dp3p4y;
+	  i_ssrp4 -= dp4p1y;
 	}
-	
-	t_i -= s;
-	t_j += c;
+	ssrp1 += dp1p2x;
+	ssrp2 += dp2p3x;
+	ssrp3 += dp3p4x;
+	ssrp4 += dp4p1x;
   }
 
   return 0;
